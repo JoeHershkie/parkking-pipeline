@@ -1,0 +1,18 @@
+# --- Generated pipeline outputs (regenerate locally) ---
+/data/toronto_raw_parking_dump.csv
+/data/clean_parking_targets.csv
+/data/parsed_successes.csv
+/data/llm_processing_queue.csv
+/data/failure_ledger.csv
+/data/final_parking_map.geojson
+
+# --- External spatial sources (download locally) ---
+/data/tcl_streets.geojson
+/data/tcl_intersections.geojson
+
+# --- Python / OS / IDE ---
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+.idea/

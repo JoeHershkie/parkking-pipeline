@@ -1,8 +1,10 @@
 import pandas as pd
 import re
 
+from paths import data_path
+
 # 1. Load your clean data
-df = pd.read_csv('clean_parking_targets.csv')
+df = pd.read_csv(data_path('clean_parking_targets.csv'))
 
 # --- THE REGEX RULEBOOK ---
 
@@ -102,5 +104,5 @@ print(f"Total Rows: {total_rows}")
 print(f"Regex Solved: {success_count} ({round((success_count / total_rows) * 100, 1)}%)")
 print(f"Sent to LLM: {fail_count} ({round((fail_count / total_rows) * 100, 1)}%)")
 
-llm_queue_df.to_csv('llm_processing_queue.csv', index=False)
-regex_success_df.to_csv('parsed_successes.csv', index=False)
+llm_queue_df.to_csv(data_path('llm_processing_queue.csv'), index=False)
+regex_success_df.to_csv(data_path('parsed_successes.csv'), index=False)

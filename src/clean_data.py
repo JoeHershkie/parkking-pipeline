@@ -2,8 +2,10 @@ import pandas as pd
 import ast
 import sys
 
+from paths import data_path
+
 # 1. Load the massive CSV into memory
-df = pd.read_csv('toronto_raw_parking_dump.csv')
+df = pd.read_csv(data_path('toronto_raw_parking_dump.csv'))
 
 # 2. Fix the filter: Use .str.contains() to catch things like "Schedule 13: No Parking"
 # We also ignore capitalization (case=False) just to be safe.
@@ -32,12 +34,18 @@ print("Unpacking nested data... (this might take a few seconds)")
 unpacked_list = active_rules['ByLaw_Table'].apply(extract_bylaw_data).tolist()
 unpacked_data = pd.DataFrame(unpacked_list, index=active_rules.index)
 
-# 5. Filter by the specific columns we actually want
-columns_to_keep = ['Highway', 'Side', 'Between', 'Prohibited Times and/or Days']
+# 5. Keep traceability fields plus unpacked bylaw columns
+metadata_cols = ['_id', 'scheduleName']
+bylaw_cols = ['Highway', 'Side', 'Between', 'Prohibited Times and/or Days']
 
-# (We use .reindex instead of just brackets to avoid errors if a column happens to be entirely missing)
-clean_data = unpacked_data.reindex(columns=columns_to_keep)
+clean_data = pd.concat(
+    [
+        active_rules.reindex(columns=metadata_cols),
+        unpacked_data.reindex(columns=bylaw_cols),
+    ],
+    axis=1,
+)
 
 # 6. Save to a brand new, tiny CSV file
-clean_data.to_csv('clean_parking_targets.csv', index=False)
+clean_data.to_csv(data_path('clean_parking_targets.csv'), index=False)
 print("Done! Clean CSV created.")
