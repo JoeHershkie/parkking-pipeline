@@ -1,0 +1,427 @@
+"""TCL street graph: walk centreline edges between intersection nodes."""
+
+from __future__ import annotations
+
+import math
+import re
+from collections import deque
+from dataclasses import dataclass, field
+
+import geopandas as gpd
+import pandas as pd
+import pyproj
+from shapely.geometry import LineString, MultiLineString, Point
+from shapely.ops import linemerge, transform
+
+import intersection_index as ix_index
+
+project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
+project_to_gps = pyproj.Transformer.from_crs(32617, 4326, always_xy=True).transform
+
+_intersections_gdf: gpd.GeoDataFrame | None = None
+_node_points_gps: dict[int, Point] = {}
+
+
+@dataclass
+class StreetEdge:
+    centreline_id: int
+    from_id: int
+    to_id: int
+    line_gps: LineString
+    line_m: LineString
+
+
+@dataclass
+class StreetGraph:
+    name: str
+    edges: list[StreetEdge]
+    adj: dict[int, list[tuple[int, StreetEdge]]] = field(default_factory=dict)
+    _path_cache: dict[tuple[int, int], list[StreetEdge] | None] = field(
+        default_factory=dict, repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if not self.adj:
+            self.adj = _build_adjacency(self.edges)
+
+
+def _linestring_part(geom) -> LineString | None:
+    if geom is None or geom.is_empty:
+        return None
+    if geom.geom_type == 'LineString':
+        return geom
+    if geom.geom_type == 'MultiLineString':
+        return max(geom.geoms, key=lambda g: g.length)
+    return None
+
+
+def _build_adjacency(edges: list[StreetEdge]) -> dict[int, list[tuple[int, StreetEdge]]]:
+    adj: dict[int, list[tuple[int, StreetEdge]]] = {}
+    for edge in edges:
+        adj.setdefault(edge.from_id, []).append((edge.to_id, edge))
+        adj.setdefault(edge.to_id, []).append((edge.from_id, edge))
+    return adj
+
+
+def configure_intersections(ix_gdf: gpd.GeoDataFrame) -> None:
+    """Store intersection lookup tables for ID resolution."""
+    global _intersections_gdf, _node_points_gps
+    _intersections_gdf = ix_gdf
+    ix_index.configure(ix_gdf)
+    _node_points_gps = {
+        int(row['INTERSECTION_ID']): row.geometry.centroid
+        for _, row in ix_gdf.iterrows()
+    }
+
+
+def resolve_intersection_ids(highway: str, cross: str) -> list[int]:
+    """All INTERSECTION_IDs matching highway × cross street."""
+    if not highway or not cross or _intersections_gdf is None:
+        return []
+    return list(ix_index.resolve_pair_ids(highway, cross))
+
+
+def node_point_gps(node_id: int) -> Point | None:
+    return _node_points_gps.get(int(node_id))
+
+
+def build_street_graphs(st_gdf: gpd.GeoDataFrame) -> dict[str, StreetGraph]:
+    """One undirected graph per legal street name (lowercased)."""
+    name_lower = st_gdf['LINEAR_NAME_FULL_LEGAL'].str.lower()
+    graphs: dict[str, StreetGraph] = {}
+    for s_name, group in st_gdf.groupby(name_lower, sort=False):
+        edges: list[StreetEdge] = []
+        for _, row in group.iterrows():
+            from_id = row.get('FROM_INTERSECTION_ID')
+            to_id = row.get('TO_INTERSECTION_ID')
+            if pd.isna(from_id) or pd.isna(to_id):
+                continue
+            line_gps = _linestring_part(row.geometry)
+            if line_gps is None:
+                continue
+            line_m = transform(project_to_meters, line_gps)
+            edges.append(StreetEdge(
+                centreline_id=int(row['CENTRELINE_ID']),
+                from_id=int(from_id),
+                to_id=int(to_id),
+                line_gps=line_gps,
+                line_m=line_m,
+            ))
+        if edges:
+            graphs[s_name] = StreetGraph(name=s_name, edges=edges)
+    return graphs
+
+
+def shortest_path(graph: StreetGraph, id_a: int, id_b: int) -> list[StreetEdge] | None:
+    """BFS shortest path (fewest edges) between intersection nodes."""
+    id_a, id_b = int(id_a), int(id_b)
+    if id_a == id_b:
+        return []
+
+    cache_key = (id_a, id_b)
+    if cache_key in graph._path_cache:
+        return graph._path_cache[cache_key]
+
+    if id_a not in graph.adj or id_b not in graph.adj:
+        graph._path_cache[cache_key] = None
+        graph._path_cache[(id_b, id_a)] = None
+        return None
+
+    prev: dict[int, tuple[int, StreetEdge] | None] = {id_a: None}
+    queue: deque[int] = deque([id_a])
+
+    while queue:
+        node = queue.popleft()
+        if node == id_b:
+            break
+        for neighbor, edge in graph.adj.get(node, []):
+            if neighbor in prev:
+                continue
+            prev[neighbor] = (node, edge)
+            queue.append(neighbor)
+
+    if id_b not in prev:
+        graph._path_cache[cache_key] = None
+        graph._path_cache[(id_b, id_a)] = None
+        return None
+
+    path_edges: list[StreetEdge] = []
+    cur = id_b
+    while cur != id_a:
+        parent, edge = prev[cur]
+        path_edges.append(edge)
+        cur = parent
+    path_edges.reverse()
+
+    graph._path_cache[cache_key] = path_edges
+    graph._path_cache[(id_b, id_a)] = list(reversed(path_edges))
+    return path_edges
+
+
+def path_length_m(edges: list[StreetEdge]) -> float:
+    return sum(e.line_m.length for e in edges)
+
+
+def path_centreline_ids(edges: list[StreetEdge]) -> list[int]:
+    return [e.centreline_id for e in edges]
+
+
+def _orient_edge_line(edge: StreetEdge, from_id: int, to_id: int, use_meters: bool) -> LineString:
+    line = edge.line_m if use_meters else edge.line_gps
+    if edge.from_id == from_id and edge.to_id == to_id:
+        return line
+    if edge.from_id == to_id and edge.to_id == from_id:
+        return LineString(list(line.coords)[::-1])
+    raise ValueError(f'edge {edge.centreline_id} does not connect {from_id} and {to_id}')
+
+
+def _concat_lines(lines: list[LineString]) -> LineString:
+    if not lines:
+        return LineString()
+    coords: list = []
+    for line in lines:
+        part = list(line.coords)
+        if not coords:
+            coords.extend(part)
+        elif coords[-1] == part[0]:
+            coords.extend(part[1:])
+        else:
+            coords.extend(part)
+    return LineString(coords)
+
+
+def path_to_linestring(
+    edges: list[StreetEdge],
+    orient_from: int,
+    orient_to: int,
+    *,
+    use_meters: bool = False,
+) -> LineString:
+    """Concatenate edge geometries head-to-tail from orient_from to orient_to."""
+    if not edges:
+        pt = node_point_gps(orient_from)
+        if pt is None:
+            return LineString()
+        return LineString([pt.coords[0], pt.coords[0]])
+
+    lines: list[LineString] = []
+    cur = int(orient_from)
+    target = int(orient_to)
+    for edge in edges:
+        nbrs = {edge.from_id, edge.to_id} - {cur}
+        if not nbrs:
+            break
+        nxt = nbrs.pop()
+        lines.append(_orient_edge_line(edge, cur, nxt, use_meters))
+        cur = nxt
+        if cur == target:
+            break
+    return _concat_lines(lines)
+
+
+def slice_path_between(
+    edges: list[StreetEdge],
+    id_start: int,
+    id_end: int,
+) -> LineString:
+    """Return GPS path geometry between two intersection nodes."""
+    if id_start == id_end:
+        pt = node_point_gps(id_start)
+        if pt is None:
+            return LineString()
+        c = pt.coords[0]
+        return LineString([c, c])
+    return path_to_linestring(edges, id_start, id_end, use_meters=False)
+
+
+@dataclass
+class PathPick:
+    id_start: int
+    id_end: int
+    edges: list[StreetEdge]
+    length_m: float
+
+
+def pick_intersection_pair(
+    graph: StreetGraph,
+    highway: str,
+    cross_a: str,
+    cross_b: str,
+) -> PathPick | None:
+    """Choose ID pair with shortest valid graph path (fewest edges, then length)."""
+    ids_a = resolve_intersection_ids(highway, cross_a)
+    ids_b = resolve_intersection_ids(highway, cross_b)
+    if not ids_a or not ids_b:
+        return None
+
+    best: PathPick | None = None
+    tied = False
+
+    for id_a in ids_a:
+        for id_b in ids_b:
+            if id_a == id_b:
+                continue
+            path = shortest_path(graph, id_a, id_b)
+            if path is None:
+                continue
+            length = path_length_m(path)
+            candidate = PathPick(id_a, id_b, path, length)
+            if best is None:
+                best = candidate
+                tied = False
+                continue
+            if len(path) < len(best.edges):
+                best = candidate
+                tied = False
+            elif len(path) == len(best.edges):
+                if length < best.length_m - 1e-3:
+                    best = candidate
+                    tied = False
+                elif abs(length - best.length_m) < 1e-3:
+                    tied = True
+
+    if best is None or tied:
+        return None
+    return best
+
+
+def _disambiguate_project_dist(projects: list[float], qualifier: str) -> float | None:
+    ql = str(qualifier).lower()
+    if 'wester' in ql or re.search(r'\bwest\b', ql):
+        return min(projects)
+    if 'easter' in ql or re.search(r'\beast\b', ql):
+        return max(projects)
+    if 'norther' in ql or re.search(r'\bnorth\b', ql):
+        return max(projects)
+    if 'souther' in ql or re.search(r'\bsouth\b', ql):
+        return min(projects)
+    return None
+
+
+def pick_id_with_qualifier(
+    highway: str,
+    cross: str,
+    qualifier: str,
+    path_line_m: LineString,
+) -> int | None:
+    """Pick one intersection ID using compass qualifier on a candidate path."""
+    ids = resolve_intersection_ids(highway, cross)
+    if not ids:
+        return None
+    if len(ids) == 1 or not qualifier:
+        return ids[0]
+
+    projects: list[float] = []
+    for node_id in ids:
+        pt = node_point_gps(node_id)
+        if pt is None:
+            continue
+        pt_m = transform(project_to_meters, pt)
+        projects.append(path_line_m.project(pt_m))
+
+    if len(projects) != len(ids):
+        return None
+
+    chosen = _disambiguate_project_dist(projects, qualifier)
+    if chosen is None:
+        return None
+    for node_id, proj in zip(ids, projects, strict=True):
+        if abs(proj - chosen) < 1e-3:
+            return node_id
+    return ids[projects.index(chosen)]
+
+
+def connected_component_edges(graph: StreetGraph, start_id: int) -> list[StreetEdge]:
+    """All edges in the connected component containing start_id."""
+    start_id = int(start_id)
+    if start_id not in graph.adj:
+        return []
+    seen_nodes: set[int] = {start_id}
+    seen_edges: set[int] = set()
+    component: list[StreetEdge] = []
+    queue: deque[int] = deque([start_id])
+
+    while queue:
+        node = queue.popleft()
+        for neighbor, edge in graph.adj.get(node, []):
+            if edge.centreline_id not in seen_edges:
+                seen_edges.add(edge.centreline_id)
+                component.append(edge)
+            if neighbor not in seen_nodes:
+                seen_nodes.add(neighbor)
+                queue.append(neighbor)
+    return component
+
+
+def component_linestring_m(graph: StreetGraph, start_id: int) -> LineString | None:
+    """Merged metre geometry for the component containing start_id."""
+    edges = connected_component_edges(graph, start_id)
+    if not edges:
+        return None
+    merged = linemerge(MultiLineString([e.line_m for e in edges]))
+    if merged.geom_type == 'MultiLineString':
+        return max(merged.geoms, key=lambda g: g.length)
+    return merged
+
+
+def path_from_start_to_terminus(
+    graph: StreetGraph,
+    start_id: int,
+    terminus_dir: str,
+    terminus_dist_fn,
+) -> tuple[list[StreetEdge], int] | None:
+    """
+    Walk from start_id toward the compass terminus on the local component.
+    Returns (edge path, end_node_id) where end_node is the terminus node.
+    """
+    comp_line = component_linestring_m(graph, start_id)
+    if comp_line is None or comp_line.length == 0:
+        return None
+
+    terminus_dist = terminus_dist_fn(comp_line, terminus_dir)
+    start_pt = transform(project_to_meters, node_point_gps(start_id))
+    if start_pt is None:
+        return None
+    start_dist = comp_line.project(start_pt)
+
+    if terminus_dist >= start_dist:
+        target_dist = comp_line.length
+    else:
+        target_dist = 0.0
+
+    target_pt = comp_line.interpolate(target_dist)
+    end_id = _nearest_node_on_component(graph, start_id, target_pt)
+    if end_id is None:
+        return None
+
+    path = shortest_path(graph, start_id, end_id)
+    if path is None:
+        return None
+    return path, end_id
+
+
+def _nearest_node_on_component(
+    graph: StreetGraph,
+    start_id: int,
+    target_pt_m: Point,
+) -> int | None:
+    edges = connected_component_edges(graph, start_id)
+    nodes: set[int] = set()
+    for e in edges:
+        nodes.add(e.from_id)
+        nodes.add(e.to_id)
+    if not nodes:
+        return int(start_id)
+
+    best_id: int | None = None
+    best_dist = math.inf
+    for node_id in nodes:
+        pt = node_point_gps(node_id)
+        if pt is None:
+            continue
+        pt_m = transform(project_to_meters, pt)
+        d = pt_m.distance(target_pt_m)
+        if d < best_dist:
+            best_dist = d
+            best_id = node_id
+    return best_id

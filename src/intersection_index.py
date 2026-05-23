@@ -1,0 +1,107 @@
+"""Fast substring intersection lookup for TCL INTERSECTION_DESC rows."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Iterable
+
+import ahocorasick
+import geopandas as gpd
+
+from intersection_normalize import apply_street_alias
+
+_ids: list[int] = []
+_descs: list[str] = []
+_id_order: dict[int, int] = {}
+_postings: dict[str, tuple[int, ...]] = {}
+
+
+def configure(ix_gdf: gpd.GeoDataFrame) -> None:
+    """Load parallel id/desc arrays and clear token postings."""
+    global _ids, _descs, _id_order, _postings
+    _ids = [int(x) for x in ix_gdf['INTERSECTION_ID'].tolist()]
+    _descs = ix_gdf['INTERSECTION_DESC'].str.lower().tolist()
+    _id_order = {ix_id: i for i, ix_id in enumerate(_ids)}
+    _postings = {}
+    resolve_pair_ids.cache_clear()
+
+
+def postings_snapshot() -> dict[str, tuple[int, ...]]:
+    return dict(_postings)
+
+
+def install_postings(postings: dict[str, tuple[int, ...]]) -> None:
+    """Restore cached token postings (e.g. from geo_cache)."""
+    global _postings
+    _postings = dict(postings)
+    resolve_pair_ids.cache_clear()
+
+
+def _ensure_token(token: str) -> tuple[int, ...]:
+    if not token:
+        return ()
+    cached = _postings.get(token)
+    if cached is not None:
+        return cached
+    ids = tuple(
+        ix_id for ix_id, desc in zip(_ids, _descs, strict=True) if token in desc
+    )
+    _postings[token] = ids
+    return ids
+
+
+def warm_tokens(tokens: Iterable[str]) -> int:
+    """
+    One pass over intersection descriptions (Aho–Corasick) to fill token postings.
+    Returns the number of tokens newly indexed.
+    """
+    pending = {t for t in tokens if t and t not in _postings}
+    if not pending:
+        return 0
+
+    automaton = ahocorasick.Automaton()
+    for token in pending:
+        automaton.add_word(token, token)
+    automaton.make_automaton()
+
+    buckets: dict[str, list[int]] = {t: [] for t in pending}
+    for ix_id, desc in zip(_ids, _descs, strict=True):
+        for _, token in automaton.iter(desc):
+            buckets[token].append(ix_id)
+
+    for token, bucket in buckets.items():
+        _postings[token] = tuple(bucket)
+    return len(pending)
+
+
+def collect_tokens_from_pairs(pairs: Iterable[tuple[str, str]]) -> set[str]:
+    """Normalized search tokens for a set of (street_a, street_b) lookups."""
+    tokens: set[str] = set()
+    for a, b in pairs:
+        if a:
+            tokens.add(apply_street_alias(a))
+        if b:
+            tokens.add(apply_street_alias(b))
+    return tokens
+
+
+@lru_cache(maxsize=65536)
+def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
+    """INTERSECTION_IDs whose description contains both normalized street tokens."""
+    if not street_1 or not street_2:
+        return ()
+    s1 = apply_street_alias(street_1)
+    s2 = apply_street_alias(street_2)
+    if not s1 or not s2:
+        return ()
+
+    ids_a = _ensure_token(s1)
+    ids_b = _ensure_token(s2)
+    if not ids_a or not ids_b:
+        return ()
+    matched = set(ids_a) & set(ids_b)
+    return tuple(sorted(matched, key=_id_order.__getitem__))
+
+
+def match_count(street_1: str, street_2: str) -> int:
+    return len(resolve_pair_ids(street_1, street_2))

@@ -2,3 +2,5 @@ pandas
 geopandas
 shapely
 pyproj
+pyogrio
+pyahocorasick
