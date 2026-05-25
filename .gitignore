@@ -16,3 +16,5 @@ __pycache__/
 .venv/
 .DS_Store
 .idea/
+
+data/
