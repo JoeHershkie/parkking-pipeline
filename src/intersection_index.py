@@ -8,7 +8,11 @@ from typing import Iterable
 import ahocorasick
 import geopandas as gpd
 
-from intersection_normalize import apply_street_alias
+from intersection_normalize import (
+    apply_street_alias,
+    expand_cross_lookup_names,
+    tcl_search_tokens,
+)
 
 _ids: list[int] = []
 _descs: list[str] = []
@@ -78,11 +82,40 @@ def collect_tokens_from_pairs(pairs: Iterable[tuple[str, str]]) -> set[str]:
     """Normalized search tokens for a set of (street_a, street_b) lookups."""
     tokens: set[str] = set()
     for a, b in pairs:
-        if a:
-            tokens.add(apply_street_alias(a))
-        if b:
-            tokens.add(apply_street_alias(b))
+        for name in expand_cross_lookup_names(a) if a else ():
+            tokens.update(tcl_search_tokens(name))
+        for name in expand_cross_lookup_names(b) if b else ():
+            tokens.update(tcl_search_tokens(name))
     return tokens
+
+
+def _lookup_name_candidates(street: str) -> tuple[str, ...]:
+    if not street or not str(street).strip():
+        return ()
+    names: list[str] = []
+    seen: set[str] = set()
+    for part in expand_cross_lookup_names(street):
+        key = part.strip()
+        if key and key not in seen:
+            seen.add(key)
+            names.append(key)
+    return tuple(names)
+
+
+def _resolve_with_tokens(tokens_1: tuple[str, ...], tokens_2: tuple[str, ...]) -> tuple[int, ...]:
+    for t1 in tokens_1:
+        ids_a = _ensure_token(t1)
+        if not ids_a:
+            continue
+        set_a = set(ids_a)
+        for t2 in tokens_2:
+            ids_b = _ensure_token(t2)
+            if not ids_b:
+                continue
+            matched = set_a & set(ids_b)
+            if matched:
+                return tuple(sorted(matched, key=_id_order.__getitem__))
+    return ()
 
 
 @lru_cache(maxsize=65536)
@@ -90,17 +123,19 @@ def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
     """INTERSECTION_IDs whose description contains both normalized street tokens."""
     if not street_1 or not street_2:
         return ()
-    s1 = apply_street_alias(street_1)
-    s2 = apply_street_alias(street_2)
-    if not s1 or not s2:
-        return ()
 
-    ids_a = _ensure_token(s1)
-    ids_b = _ensure_token(s2)
-    if not ids_a or not ids_b:
-        return ()
-    matched = set(ids_a) & set(ids_b)
-    return tuple(sorted(matched, key=_id_order.__getitem__))
+    for name_1 in _lookup_name_candidates(street_1):
+        tokens_1 = tcl_search_tokens(name_1)
+        if not tokens_1:
+            continue
+        for name_2 in _lookup_name_candidates(street_2):
+            tokens_2 = tcl_search_tokens(name_2)
+            if not tokens_2:
+                continue
+            hit = _resolve_with_tokens(tokens_1, tokens_2)
+            if hit:
+                return hit
+    return ()
 
 
 def match_count(street_1: str, street_2: str) -> int:

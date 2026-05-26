@@ -3,7 +3,12 @@ from pathlib import Path
 
 from paths import data_path
 
-LEDGER_COLUMNS = ['row_id', 'stage', 'reason_code', 'detail', 'highway', 'between']
+LEDGER_COLUMNS = [
+    'row_id', 'stage', 'reason_code', 'detail', 'highway', 'between', 'between_parsed_input',
+]
+
+# Intentional pipeline policy — excluded from ledger/triage (not actionable failures).
+LEDGER_EXCLUDED_REASON_CODES = frozenset({'DUPLICATE_RULE'})
 
 
 def _ledger_path() -> Path:
@@ -24,7 +29,16 @@ def clear_stage(stage: str) -> None:
         writer.writerows(remaining)
 
 
-def record_failure(row_id, stage, reason_code, detail, highway, between) -> None:
+def record_failure(
+    row_id,
+    stage,
+    reason_code,
+    detail,
+    highway,
+    between,
+    between_parsed_input: str = '',
+) -> None:
+    """Append one failure row. ``between`` is source; ``between_parsed_input`` is parse regex input."""
     path = _ledger_path()
     write_header = not path.exists()
     with path.open('a', newline='', encoding='utf-8') as f:
@@ -38,4 +52,5 @@ def record_failure(row_id, stage, reason_code, detail, highway, between) -> None
             'detail': detail,
             'highway': highway,
             'between': between,
+            'between_parsed_input': between_parsed_input,
         })

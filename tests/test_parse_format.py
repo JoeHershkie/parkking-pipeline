@@ -9,10 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
 from parse_format import (  # noqa: E402
+    apply_trailing_qualifiers,
     highway_from_row,
     norm_anchor,
     norm_columns_for_row,
     row_to_parsed,
+    split_trailing_qualifier,
     validate_parsed,
 )
 
@@ -27,6 +29,36 @@ def test_validate_rejects_point_metres_anchor() -> None:
     ok, err = validate_parsed(parsed)
     assert not ok
     assert 'invalid anchor' in err
+
+
+def test_validate_accepts_compass_offset_direction() -> None:
+    parsed = {
+        'rule_type': 'offset_to_intersect',
+        'start_intersection': 'Penn Drive',
+        'end_intersection': 'Finch Avenue West',
+        'distance': '198',
+        'direction': 'southeast',
+    }
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+def test_split_trailing_qualifier() -> None:
+    name, qual = split_trailing_qualifier('Penn Drive (northwest intersection)')
+    assert name == 'Penn Drive'
+    assert qual == 'northwest intersection'
+
+
+def test_apply_trailing_qualifiers_on_block() -> None:
+    parsed = apply_trailing_qualifiers({
+        'rule_type': 'block',
+        'start_intersection': 'Penn Drive (northwest intersection)',
+        'end_intersection': 'Finch Avenue West',
+    })
+    assert parsed['start_intersection'] == 'Penn Drive'
+    assert parsed['start_intersection_qualifier'] == 'northwest intersection'
+    ok, err = validate_parsed(parsed)
+    assert ok, err
 
 
 def test_validate_accepts_block() -> None:

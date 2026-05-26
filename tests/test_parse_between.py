@@ -10,8 +10,11 @@ sys.path.insert(0, str(ROOT / 'src'))
 
 from parse_between import (  # noqa: E402
     normalize_anchor_phrase,
+    normalize_parsed,
     parse_between,
+    preprocess_between,
 )
+from parse_format import validate_parsed  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -91,3 +94,217 @@ def test_parse_misparse_fixes(between: str, rule_type: str, checks: dict) -> Non
     assert parsed['rule_type'] == rule_type
     for key, val in checks.items():
         assert parsed.get(key) == val, f'{key}: got {parsed.get(key)!r}'
+
+
+def test_preprocess_between_fixes_metres_spacing() -> None:
+    assert '98 metres north' in preprocess_between(
+        'A point 98 metresnorth of Ridge Hill Drive and the south end of Elm Ridge Circle',
+    )
+    assert '3604 metres west' in preprocess_between(
+        'A point 3604metres west of Neilson Road and a point 28 metres further west',
+    )
+
+
+@pytest.mark.parametrize(
+    ('between', 'expected_fragment'),
+    [
+        ('Yonge Street to Victoria Street', 'Yonge Street and Victoria Street'),
+        (
+            'A point 127 metres west of Christie Street to a point 30 metres further west',
+            'Christie Street and a point 30 metres further west',
+        ),
+        ('Adjacent to Bessborough School', 'Adjacent to Bessborough School'),
+        (
+            '8:00 a.m. to 9:00 a.m. and 3:00 p.m. to 4:00 p.m., Mon. to Fri.',
+            '8:00 a.m. to 9:00 a.m.',
+        ),
+    ],
+)
+def test_preprocess_between_replaces_joiner_to(between: str, expected_fragment: str) -> None:
+    assert expected_fragment in preprocess_between(between)
+
+
+def test_parse_between_joiner_to() -> None:
+    parsed = parse_between('Yonge Street to Victoria Street')
+    assert parsed is not None
+    assert parsed['rule_type'] == 'block'
+    assert parsed['start_intersection'] == 'Yonge Street'
+    assert parsed['end_intersection'] == 'Victoria Street'
+
+
+def test_normalize_parsed_splits_qualifiers() -> None:
+    parsed = normalize_parsed({
+        'rule_type': 'block',
+        'start_intersection': 'Penn Drive (northwest intersection)',
+        'end_intersection': 'Finch Avenue West',
+    })
+    assert parsed['start_intersection'] == 'Penn Drive'
+    assert parsed['start_intersection_qualifier'] == 'northwest intersection'
+
+
+@pytest.mark.parametrize(
+    ('between', 'checks'),
+    [
+        (
+            'Milvan Drive (northwest intersection) and Milvan Drive (southeast intersection)',
+            {
+                'rule_type': 'parenthetical_dual_block',
+                'start_intersection': 'Milvan Drive',
+                'end_intersection': 'Milvan Drive',
+                'start_intersection_qualifier': 'northwest intersection',
+                'end_intersection_qualifier': 'southeast intersection',
+            },
+        ),
+        (
+            'Husband Drive (west intersection) and Husband Drive (east intersection)',
+            {
+                'rule_type': 'parenthetical_dual_block',
+                'start_intersection_qualifier': 'west intersection',
+                'end_intersection_qualifier': 'east intersection',
+            },
+        ),
+        (
+            'Eugene Street (south intersection) and Caledonia Road (south intersection)',
+            {
+                'rule_type': 'parenthetical_dual_block',
+                'start_intersection': 'Eugene Street',
+                'end_intersection': 'Caledonia Road',
+            },
+        ),
+    ],
+)
+def test_parse_between_parenthetical_dual_block(
+    between: str, checks: dict,
+) -> None:
+    parsed = parse_between(between)
+    assert parsed is not None
+    for key, expected in checks.items():
+        assert parsed[key] == expected
+
+
+@pytest.mark.parametrize(
+    ('between', 'rule_type', 'checks'),
+    [
+        (
+            'A point 198 metres southeast of Penn Drive (northwest intersection) and Finch Avenue West',
+            'offset_to_intersect',
+            {
+                'start_intersection': 'Penn Drive',
+                'end_intersection': 'Finch Avenue West',
+                'distance': '198',
+                'direction': 'southeast',
+                'start_intersection_qualifier': 'northwest intersection',
+            },
+        ),
+        (
+            'A point 405 metres south and west of Sheppard Avenue East and the west end of Settlers Road',
+            'block_to_terminus',
+            {
+                'start_intersection': 'Sheppard Avenue East',
+                'distance': '405',
+                'direction': 'south',
+                'terminus_street': 'Settlers Road',
+            },
+        ),
+        (
+            'Dundas Street and a point 104 metres northwest of Central Park Roadway (west intersection)',
+            'intersect_to_offset',
+            {
+                'start_intersection': 'Dundas Street',
+                'offset_intersection': 'Central Park Roadway',
+                'distance': '104',
+                'direction': 'northwest',
+            },
+        ),
+        (
+            'Marlee Avenue and a point 43 metres west (Cul-de-sac)',
+            'perfect_offset',
+            {
+                'start_intersection': 'Marlee Avenue',
+                'distance': '43',
+                'direction': 'west',
+            },
+        ),
+        (
+            'A point 40.5 metres east and the east end of Labatt Avenue',
+            'block_to_terminus',
+            {
+                'start_intersection': 'Labatt Avenue',
+                'terminus_street': 'Labatt Avenue',
+                'distance': '40.5',
+                'direction': 'east',
+            },
+        ),
+    ],
+)
+def test_parse_metric_anchor_upgrades(between: str, rule_type: str, checks: dict) -> None:
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == rule_type
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+    for key, val in checks.items():
+        assert parsed.get(key) == val, f'{key}: got {parsed.get(key)!r}'
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected_fragment'),
+    [
+        ('Bathurst Street and a point 91.5 metres west Bathurst Street', 'west of Bathurst'),
+        ('A point 342 metres south and Sheppard Avenue East', 'south and east of Sheppard'),
+        ('Greenwin Village Road and a point 321 metres south/west of Bison Drive', 'south and west of'),
+        ('A point ppposite the southerly limit', 'opposite the southerly limit'),
+    ],
+)
+def test_preprocess_between_point_and_street_fixes(raw: str, expected_fragment: str) -> None:
+    assert expected_fragment in preprocess_between(raw)
+
+
+@pytest.mark.parametrize(
+    ('between', 'rule_type'),
+    [
+        (
+            'A point 70 metres north and west of Horsham Avenue and Tamworth Road',
+            'offset_to_intersect',
+        ),
+        (
+            'Seneca Hill Drive and a point 155 metres southeast of Seneca Hill Drive',
+            'intersect_to_offset',
+        ),
+        (
+            'Spring Garden Avenue and a point 88 metres south thereof',
+            'intersect_extension',
+        ),
+        (
+            'A point 79 metres east of Scott Road and a point 25 metres further east thereof',
+            'relative_extension',
+        ),
+        (
+            'A point 45.8 metres west of Jethro Road and a point 76.3 metres north and west of Jethro Road',
+            'dual_anchor',
+        ),
+        (
+            'A point opposite the southerly limit of Glenbrook Avenue and Glengrove Avenue',
+            'block',
+        ),
+    ],
+)
+def test_parse_point_and_street_patterns(between: str, rule_type: str) -> None:
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == rule_type
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+def test_parse_between_parenthetical_dual_block_not_dual_anchor() -> None:
+    """Plain dual-qualified block must not match dual_anchor (metric offsets)."""
+    between = (
+        'Milvan Drive (northwest intersection) and Milvan Drive (southeast intersection)'
+    )
+    assert parse_between(between)['rule_type'] == 'parenthetical_dual_block'
+    metric = (
+        'A point 45.7 metres east of Ellis Avenue (north intersection) and '
+        'a point 45.7 metres east of Ellis Avenue (south intersection)'
+    )
+    assert parse_between(metric)['rule_type'] == 'dual_anchor'

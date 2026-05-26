@@ -16,6 +16,23 @@ from schedule_format import (
 )
 
 SCHEDULE_EMPTY = 'SCHEDULE_EMPTY'
+EMPTY_TIMES_DEFAULT = 'Anytime'
+_EMPTY_TIMES_DEFAULT_CATEGORIES = frozenset({
+    'no_parking',
+    'no_stopping',
+    'no_standing',
+})
+
+
+def empty_times_default(row: pd.Series) -> str | None:
+    """
+    When prohibited times are blank, infer a parseable schedule for known bylaw types.
+    No parking / no stopping / no standing with no times → anytime prohibition.
+    """
+    category = str(row.get('schedule_category', '')).strip()
+    if category in _EMPTY_TIMES_DEFAULT_CATEGORIES:
+        return EMPTY_TIMES_DEFAULT
+    return None
 
 
 def parse_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
@@ -28,8 +45,9 @@ def parse_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
         highway = raw.get('Highway', '')
         between = raw.get('Between', '')
         times = raw.get('Prohibited Times and/or Days')
-
         if pd.isna(times) or not str(times).strip():
+            times = empty_times_default(raw)
+        if times is None or not str(times).strip():
             record_failure(row_id, 'schedule', SCHEDULE_EMPTY, 'empty times', highway, between)
             failure_counts[SCHEDULE_EMPTY] += 1
             continue

@@ -79,6 +79,10 @@ CAUSE_ATTRIBUTION: dict[str, tuple[str, str]] = {
         'centreline_geometry',
         'Parenthetical end and start collapse on centreline projection',
     ),
+    'parenthetical_dual_block_collapse': (
+        'centreline_geometry',
+        'Dual parenthetical start and end collapse on centreline projection',
+    ),
     'parenthetical_to_terminus_collapse': (
         'valid_point_zone',
         'Parenthetical start equals computed terminus distance',
@@ -326,6 +330,25 @@ def diagnose_row(row: pd.Series) -> dict[str, Any]:
         if not _collapsed(d0, d1):
             return finish(d0, d1, 'unexpected_nonzero')
         return finish(d0, d1, 'parenthetical_end_block_collapse')
+
+    if rt == 'parenthetical_dual_block':
+        start = parsed.get('start_intersection')
+        end = parsed.get('end_intersection')
+        out['intersection_match_count_start'] = _match_count(highway, start)
+        out['intersection_match_count_end'] = _match_count(highway, end)
+        out['start_perp_m'] = _perp_m(highway, start, line_m)
+        out['end_perp_m'] = _perp_m(highway, end, line_m)
+        d0, e0 = ge.intersection_dist_with_qualifier(
+            highway, start, line_m, parsed.get('start_intersection_qualifier'),
+        )
+        d1, e1 = ge.intersection_dist_with_qualifier(
+            highway, end, line_m, parsed.get('end_intersection_qualifier'),
+        )
+        if e0 or e1:
+            return finish(d0, d1, 'intersection_missing')
+        if not _collapsed(d0, d1):
+            return finish(d0, d1, 'unexpected_nonzero')
+        return finish(d0, d1, 'parenthetical_dual_block_collapse')
 
     if rt == 'parenthetical_to_terminus':
         start = parsed.get('start_intersection')

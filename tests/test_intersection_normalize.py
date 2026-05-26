@@ -9,7 +9,10 @@ sys.path.insert(0, str(ROOT / 'src'))
 from intersection_normalize import (  # noqa: E402
     apply_street_alias,
     clear_alias_cache,
+    expand_cross_lookup_names,
     normalize_intersection_street,
+    strip_lookup_prefixes,
+    tcl_search_tokens,
 )
 
 
@@ -50,6 +53,63 @@ def test_phase_a_aliases():
     assert apply_street_alias("St. John's Road") == 'st johns'
     assert apply_street_alias('Indian Road Crescent') == 'indian rd'
     assert apply_street_alias('Austin Terrace') == 'austin ter'
+
+
+def test_tcl_search_tokens_includes_gate_spelling_variant():
+    tokens = tcl_search_tokens('York Gate Boulevard')
+    assert 'york gt blvd' in tokens
+    assert 'york gate blvd' in tokens
+
+
+def test_tcl_search_tokens_apostrophe_variant():
+    tokens = tcl_search_tokens("St. Anne's Road")
+    assert "st anne's rd" in tokens or 'st annes rd' in tokens
+    assert 'st annes rd' in tokens
+
+
+def test_expand_cross_lookup_names_slash_and_leg():
+    assert expand_cross_lookup_names('Apsley Road/Saunders Street') == (
+        'Apsley Road/Saunders Street',
+        'Apsley Road',
+        'Saunders Street',
+    )
+    leg = expand_cross_lookup_names('the north/south leg of Coatsworth Crescent')
+    assert 'Coatsworth Crescent' in leg
+    assert 'the north/south leg of Coatsworth Crescent' in leg
+
+
+def test_st_possessive_aliases():
+    clear_alias_cache()
+    assert apply_street_alias('St. Patrick Square') == 'st patricks sq'
+    assert apply_street_alias("St. Olaves Road") == "st olave's rd"
+    assert apply_street_alias('Pengelly Court') == 'pengelly crt'
+
+
+def test_tcl_search_tokens_spelled_direction():
+    tokens = tcl_search_tokens('North Bonnington Avenue')
+    assert 'north bonnington ave' in tokens
+    assert 'n bonnington ave' in tokens
+
+
+def test_tcl_search_tokens_st_clair_ave_short():
+    tokens = tcl_search_tokens('St. Clair Avenue West')
+    assert 'st clair ave w' in tokens
+    assert 'st clair w' in tokens
+
+
+def test_strip_lookup_prefixes():
+    assert strip_lookup_prefixes('From St. Clair Avenue West') == 'St. Clair Avenue West'
+    assert (
+        strip_lookup_prefixes("the east curb line of St. Hilda's Avenue")
+        == "St. Hilda's Avenue"
+    )
+
+
+def test_tcl_search_tokens_st_clair_west_alias():
+    clear_alias_cache()
+    tokens = tcl_search_tokens('St. Clair West')
+    assert 'st clair ave w' in tokens
+    assert 'st clair w' in tokens
 
 
 if __name__ == '__main__':

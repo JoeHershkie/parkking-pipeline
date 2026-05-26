@@ -9,6 +9,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
+import pandas as pd
+
+from parse_schedule import (  # noqa: E402
+    SCHEDULE_EMPTY,
+    empty_times_default,
+    parse_rows,
+)
 from schedule_format import (  # noqa: E402
     overlaps_membership,
     parse_max_minutes,
@@ -144,3 +151,49 @@ def test_split_day_groups() -> None:
     assert overlaps_membership(
         s, {'dayOfWeek': 0, 'minuteOfDay': 540, 'month': 3, 'dayOfMonth': 1},
     )
+
+
+@pytest.mark.parametrize(
+    'category',
+    ['no_parking', 'no_stopping', 'no_standing'],
+)
+def test_empty_times_default_prohibition_schedules(category: str) -> None:
+    assert empty_times_default(pd.Series({'schedule_category': category})) == 'Anytime'
+
+
+def test_empty_times_default_not_restricted_periods() -> None:
+    assert empty_times_default(pd.Series({'schedule_category': 'restricted_periods'})) is None
+
+
+def test_parse_rows_empty_prohibition_schedules_become_anytime() -> None:
+    df = pd.DataFrame([
+        {
+            '_id': 12771,
+            'schedule_category': 'no_parking',
+            'Highway': 'Gracedale Boulevard',
+            'Between': 'A point south',
+            'Prohibited Times and/or Days': None,
+            'Maximum Period Permitted': None,
+        },
+        {
+            '_id': 18303,
+            'schedule_category': 'no_stopping',
+            'Highway': 'Queen Street West',
+            'Between': 'Noble Street',
+            'Prohibited Times and/or Days': '',
+            'Maximum Period Permitted': None,
+        },
+        {
+            '_id': 25292,
+            'schedule_category': 'restricted_periods',
+            'Highway': 'Roselawn Avenue',
+            'Between': 'Chaplin Crescent',
+            'Prohibited Times and/or Days': '',
+            'Maximum Period Permitted': None,
+        },
+    ])
+    parsed, failures = parse_rows(df)
+    assert failures[SCHEDULE_EMPTY] == 1
+    assert len(parsed) == 2
+    assert set(parsed['_id']) == {12771, 18303}
+    assert (parsed['schedule_status'] == 'anytime').all()

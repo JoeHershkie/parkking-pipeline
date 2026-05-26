@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import re
 from functools import lru_cache
-from pathlib import Path
 
 from paths import data_path
 
@@ -33,15 +32,95 @@ _REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r'\bsouth\b', 's'),
 )
 
+_SKIP_GT_LWN_GDNS = frozenset({r'\bgate\b', r'\blawn\b', r'\bgardens\b'})
+_SKIP_DIRECTIONS = frozenset({
+    r'\bwest\b', r'\beast\b', r'\bnorth\b', r'\bsouth\b',
+})
+
+_MAX_SEARCH_TOKENS = 8
+
+_LEG_OF_RE = re.compile(
+    r'^\s*the\s+(?:north/south|east/west|north|south|east|west)\s+leg\s+of\s+(.+)$',
+    re.I,
+)
+_FROM_PREFIX_RE = re.compile(r'^\s*from\s+', re.I)
+_CURB_LINE_PREFIX_RE = re.compile(
+    r'^\s*the\s+(?:east|west|north|south)\s+curb\s+line\s+of\s+',
+    re.I,
+)
+_ST_CLAIR_AVE_RE = re.compile(r'\bst clair ave ([ew])\b')
+_ST_CLAIR_SHORT_RE = re.compile(r'\bst clair ([ew])\b(?! ave\b)')
+
+
+def _apply_replacements(name: str, *, skip_patterns: frozenset[str] = frozenset()) -> str:
+    out = name
+    for pattern, replacement in _REPLACEMENTS:
+        if pattern in skip_patterns:
+            continue
+        out = re.sub(pattern, replacement, out)
+    return re.sub(r'\s+', ' ', out).strip()
+
 
 def normalize_intersection_street(street_name: str) -> str:
     """Normalize a bylaw street name for TCL INTERSECTION_DESC lookup."""
     name = str(street_name).lower().strip()
     name = name.replace('.', '')
-    for pattern, replacement in _REPLACEMENTS:
-        name = re.sub(pattern, replacement, name)
-    # Collapse whitespace
-    return re.sub(r'\s+', ' ', name).strip()
+    return _apply_replacements(name)
+
+
+def _normalize_with_tcl_spelling_variants(street_name: str) -> str:
+    """Same as normalize but keep gate/lawn/gardens spelled out for TCL descs."""
+    name = str(street_name).lower().strip()
+    name = name.replace('.', '')
+    return _apply_replacements(name, skip_patterns=_SKIP_GT_LWN_GDNS)
+
+
+def _normalize_with_spelled_directions(street_name: str) -> str:
+    """Normalize but keep north/south/east/west spelled out (TCL cross-street style)."""
+    name = str(street_name).lower().strip()
+    name = name.replace('.', '')
+    return _apply_replacements(
+        name,
+        skip_patterns=_SKIP_GT_LWN_GDNS | _SKIP_DIRECTIONS,
+    )
+
+
+def strip_lookup_prefixes(street_name: str) -> str:
+    """Remove bylaw phrasing that is not part of the TCL street token."""
+    text = str(street_name).strip()
+    text = _FROM_PREFIX_RE.sub('', text)
+    text = _CURB_LINE_PREFIX_RE.sub('', text)
+    return text.strip()
+
+
+def _apostrophe_variant(token: str) -> str | None:
+    if "'" not in token:
+        return None
+    variant = token.replace("'", '')
+    variant = re.sub(r'\s+', ' ', variant).strip()
+    return variant if variant and variant != token else None
+
+
+def _st_clair_variants(token: str) -> tuple[str, ...]:
+    """TCL INTERSECTION_DESC often drops ``ave`` on St. Clair (e/w)."""
+    out: list[str] = []
+    m = _ST_CLAIR_AVE_RE.search(token)
+    if m:
+        short = _ST_CLAIR_AVE_RE.sub(f'st clair {m.group(1)}', token)
+        if short != token:
+            out.append(short)
+    m2 = _ST_CLAIR_SHORT_RE.search(token)
+    if m2:
+        long = _ST_CLAIR_SHORT_RE.sub(f'st clair ave {m2.group(1)}', token)
+        if long != token:
+            out.append(long)
+    return tuple(out)
+
+
+def _court_crt_variant(token: str) -> str | None:
+    if token.endswith(' ct'):
+        return token[:-3] + ' crt'
+    return None
 
 
 @lru_cache(maxsize=1)
@@ -68,6 +147,82 @@ def apply_street_alias(street_name: str) -> str:
     if alias:
         return alias
     return normalize_intersection_street(street_name)
+
+
+def tcl_search_tokens(street_name: str) -> tuple[str, ...]:
+    """
+    Ordered lookup tokens for substring matching in INTERSECTION_DESC.
+    Primary alias/normalized token first, then conservative TCL spelling variants.
+    """
+    if not street_name or not str(street_name).strip():
+        return ()
+
+    raw = strip_lookup_prefixes(str(street_name).strip())
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(token: str) -> None:
+        t = token.strip().lower()
+        if t and t not in seen and len(out) < _MAX_SEARCH_TOKENS:
+            seen.add(t)
+            out.append(t)
+
+    add(apply_street_alias(raw))
+
+    spelled_dirs = _normalize_with_spelled_directions(raw)
+    add(spelled_dirs)
+
+    spelled = _normalize_with_tcl_spelling_variants(raw)
+    add(spelled)
+
+    plain = normalize_intersection_street(raw)
+    add(plain)
+
+    bases = list(dict.fromkeys(out))
+    for base in bases:
+        if not base:
+            continue
+        apost = _apostrophe_variant(base)
+        if apost:
+            add(apost)
+        crt = _court_crt_variant(base)
+        if crt:
+            add(crt)
+        for variant in _st_clair_variants(base):
+            add(variant)
+
+    return tuple(out)
+
+
+def expand_cross_lookup_names(cross: str) -> tuple[str, ...]:
+    """
+    Expand compound cross-street phrases into lookup name candidates.
+    Original first, then slash segments and leg-of-street stems.
+    """
+    if not cross or not str(cross).strip():
+        return ()
+
+    text = strip_lookup_prefixes(str(cross).strip())
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(name: str) -> None:
+        n = strip_lookup_prefixes(name.strip())
+        if n and n not in seen:
+            seen.add(n)
+            out.append(n)
+
+    add(text)
+
+    leg = _LEG_OF_RE.match(text)
+    if leg:
+        add(leg.group(1).strip())
+
+    if '/' in text:
+        for part in text.split('/'):
+            add(part.strip())
+
+    return tuple(out)
 
 
 def clear_alias_cache() -> None:

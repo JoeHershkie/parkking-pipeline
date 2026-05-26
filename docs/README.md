@@ -112,7 +112,7 @@ Produced by `clean_data.py` from active curb-rule schedules in the raw dump (exa
 | `Prohibited Times and/or Days` | When the rule applies; for restricted-period rows, copied from `Times and/or Days` when needed. |
 | `Maximum Period Permitted` | Populated for Parking for Restricted Periods rows (e.g. max stay). |
 
-Rows with failed `ByLaw_Table` unpack or duplicate curb segments (same highway, side, between, times, and `schedule_category`) are excluded from this file and recorded in `failure_ledger.csv` under stage `clean`.
+Rows with failed `ByLaw_Table` unpack are excluded from this file and recorded in `failure_ledger.csv` under stage `clean`. Duplicate curb segments (same highway, side, between, times, and `schedule_category`) are dropped during dedup (lowest `_id` kept) and are not ledger failures.
 
 ### `parsed_schedules.csv` and schedule JSON
 
@@ -180,6 +180,7 @@ Run after `clean_data.py`. `Between` text is matched against ordered patterns in
 | `terminus_to_terminus` | The west end of X and the east end of X |
 | `parenthetical_block` | Walmer Road (west intersection) and Spadina Road |
 | `parenthetical_end_block` | Start street and end street (east intersection) |
+| `parenthetical_dual_block` | Milvan Drive (northwest intersection) and Milvan Drive (southeast intersection) |
 | `parenthetical_to_terminus` | Austin Terrace (north intersection) and the east end of … |
 | `intersect_extension` | Intersection + point N metres further direction |
 | `entire_length` | `Entire length` |
@@ -202,7 +203,7 @@ Toronto Centreline is stored as a **graph**, not a single merged polyline:
 | `tcl_intersections.geojson` | **Nodes** — `INTERSECTION_ID`, `INTERSECTION_DESC`; text matching resolves cross streets to one or more node IDs |
 | `tcl_streets.geojson` | **Edges** — `FROM_INTERSECTION_ID`, `TO_INTERSECTION_ID`, segment geometry; [`src/tcl_graph.py`](../src/tcl_graph.py) walks edges between nodes |
 
-**Block-family rules** (`block`, `parenthetical_block`, `parenthetical_end_block`, `block_to_terminus`, `parenthetical_to_terminus`) use graph paths: resolve cross streets to `INTERSECTION_ID`s, BFS shortest path on street edges, concatenate segment lines. When multiple IDs match a cross street (e.g. duplicate Colbeck nodes on Armadale), the engine picks the ID pair with the shortest valid path (fewest edges, then shortest length).
+**Block-family rules** (`block`, `parenthetical_block`, `parenthetical_end_block`, `parenthetical_dual_block`, `block_to_terminus`, `parenthetical_to_terminus`) use graph paths: resolve cross streets to `INTERSECTION_ID`s, BFS shortest path on street edges, concatenate segment lines. When multiple IDs match a cross street (e.g. duplicate Colbeck nodes on Armadale), the engine picks the ID pair with the shortest valid path (fewest edges, then shortest length).
 
 **Offset / terminus rules** (Phase 2) still use **merge-longest** — all TCL chunks for a street name merged to one centreline, then `substring` by projected distance. See `.cursor/plans/tcl_graph_geometry_fix_0db8c334.plan.md` for the offset-rule redesign.
 
@@ -219,20 +220,21 @@ Distances along centreline: EPSG:4326 ↔ EPSG:32617; offset rules use **along-l
 | `DISCONNECTED_BLOCK` | Block-family rule: no graph path between resolved intersection IDs on this highway |
 | `AMBIGUOUS_INTERSECTION` | Multiple ID pairs tie on shortest path, or parenthetical qualifier cannot disambiguate |
 | `UNSUPPORTED_RULE_TYPE` | Unknown `rule_type` |
-| `GEOMETRY_ERROR` | Projection/slicing exception or empty geometry (including zero-length trimmed path) |
+| `GEOMETRY_ERROR` | Projection/slicing exception or empty geometry (non-zero-span failures) |
+| `ZERO_SPAN` | Parsed rule has no mappable curb segment (e.g. anchor already at terminus); excluded from map GeoJSON — expected skip, not a bug |
 
-Pipeline stages append failures to `data/failure_ledger.csv` via `failure_ledger.record_failure` (columns: `row_id`, `stage`, `reason_code`, `detail`, `highway`, `between`).
+Pipeline stages append failures to `data/failure_ledger.csv` via `failure_ledger.record_failure` (columns: `row_id`, `stage`, `reason_code`, `detail`, `highway`, `between`, `between_parsed_input`). Source `between` is always the clean CSV text; `between_parsed_input` is set for parse-stage failures to the string passed to regex after `preprocess_between` (empty for other stages).
 
 | `stage` | `reason_code` | When |
 |---------|---------------|------|
 | `clean` | `UNPACK_PARSE_ERROR` | `ByLaw_Table` cell is not valid Python literal JSON/list syntax |
 | `clean` | `UNPACK_EMPTY_TABLE` | Empty or keyless `ByLaw_Table` after parse |
 | `clean` | `UNPACK_MISSING_HIGHWAY` | Unpack succeeded but `Highway` is missing |
-| `clean` | `DUPLICATE_RULE` | Same dedup key as an already-kept row (lower `_id` wins) |
 | `parse` | `PARSE_NO_MATCH` | No ordered pattern matched `Between` |
 | `parse` | `PARSE_EMPTY_BETWEEN` | `Between` is empty or missing |
 | `parse` | `PARSE_INVALID` | Pattern matched but failed per-`rule_type` validation |
 | `geo` | *(see table above)* | Geometry batch loop in `geometry_engine.py` `__main__` |
+| `geo` | `ZERO_SPAN` | No line geometry to emit; row stays in `parsed_successes.csv` only |
 
 ### Intersection matching improvements (baseline → after)
 
@@ -245,6 +247,16 @@ Measured on full `parsed_successes.csv` geo run (project `.venv`):
 | Parsed rows | 22,395 | 21,814 |
 
 Changes: shared normalizer (fixes Weston/`St.`/Parkway/Gate/Lawn), new regex types for street ends and parentheticals, `dual_anchor` for dual point clauses, curated `street_aliases.csv`. **Out of scope:** leg-of-street phrasing (~44) and lane descriptions (~290) remain as `parse` failures in the ledger until new rules are added.
+
+### Failure triage (`failure_ledger.csv` → `failure_triage.csv`)
+
+Assign a `fix_tier` per ledger row (`A_intentional`, `A_trivial`, `B_quick`, `C_medium`, `D_hard`) for prioritization. Joins optional `intersection_failure_analysis.csv` and `geometry_failure_analysis.csv` when present.
+
+```bash
+.venv/bin/python scripts/triage_failure_ledger.py
+```
+
+Writes `data/failure_triage.csv` and `data/failure_triage_summary.json`. Re-run `analyze_intersection_failures.py` / `analyze_geometry_failures.py` first for richer geo/intersection columns.
 
 ### Intersection failure analysis (`INTERSECTION_NOT_FOUND`)
 

@@ -15,7 +15,10 @@ sys.path.insert(0, str(ROOT / 'src'))
 
 import intersection_index as ix
 import tcl_graph as tg
-from intersection_normalize import apply_street_alias
+from intersection_normalize import (
+    expand_cross_lookup_names,
+    tcl_search_tokens,
+)
 from paths import data_path
 
 ARMADALE = 'armadale avenue'
@@ -36,21 +39,42 @@ def configured(intersections_gdf):
     return intersections_gdf
 
 
-def _legacy_pair_ids(gdf: gpd.GeoDataFrame, street_1: str, street_2: str) -> list[int]:
+def _brute_pair_ids(gdf: gpd.GeoDataFrame, street_1: str, street_2: str) -> list[int]:
+    """Brute-force pair match using the same token/cross expansion as production."""
     desc = gdf['INTERSECTION_DESC'].str.lower()
-    s1 = apply_street_alias(street_1)
-    s2 = apply_street_alias(street_2)
-    mask = desc.str.contains(s1, regex=False, na=False) & desc.str.contains(
-        s2, regex=False, na=False,
-    )
-    seen: set[int] = set()
-    ordered: list[int] = []
-    for raw_id in gdf.loc[mask, 'INTERSECTION_ID'].tolist():
-        ix_id = int(raw_id)
-        if ix_id not in seen:
-            seen.add(ix_id)
-            ordered.append(ix_id)
-    return ordered
+    id_order = {
+        int(raw_id): i
+        for i, raw_id in enumerate(gdf['INTERSECTION_ID'].tolist())
+    }
+
+    def names_for(side: str) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for part in expand_cross_lookup_names(side):
+            key = part.strip()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(key)
+        return out or [side]
+
+    for n1 in names_for(street_1):
+        tokens_1 = tcl_search_tokens(n1)
+        for n2 in names_for(street_2):
+            tokens_2 = tcl_search_tokens(n2)
+            for t1 in tokens_1:
+                mask_a = desc.str.contains(t1, regex=False, na=False)
+                if not mask_a.any():
+                    continue
+                for t2 in tokens_2:
+                    mask = mask_a & desc.str.contains(t2, regex=False, na=False)
+                    if not mask.any():
+                        continue
+                    matched = sorted(
+                        {int(x) for x in gdf.loc[mask, 'INTERSECTION_ID'].tolist()},
+                        key=id_order.__getitem__,
+                    )
+                    return matched
+    return []
 
 
 def test_resolve_matches_legacy_scan(configured):
@@ -63,7 +87,7 @@ def test_resolve_matches_legacy_scan(configured):
         ('nonexistent highway xyz', 'also missing'),
     ]
     for a, b in pairs:
-        expected = _legacy_pair_ids(gdf, a, b)
+        expected = _brute_pair_ids(gdf, a, b)
         assert list(ix.resolve_pair_ids(a, b)) == expected
 
 
@@ -116,7 +140,7 @@ def test_random_sample_equiv_legacy(configured):
         parts = [p.strip() for p in str(row['INTERSECTION_DESC']).split('/')]
         if len(parts) < 2:
             continue
-        assert list(ix.resolve_pair_ids(parts[0], parts[-1])) == _legacy_pair_ids(
+        assert list(ix.resolve_pair_ids(parts[0], parts[-1])) == _brute_pair_ids(
             gdf, parts[0], parts[-1],
         )
 

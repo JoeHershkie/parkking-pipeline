@@ -18,6 +18,7 @@ import geo_cache as gc
 import intersection_index as ix_index
 from parse_format import _parse_valid_flag, highway_from_row, row_to_parsed
 from tcl_highway_key import tcl_highway_key
+import tcl_highway_resolve as thr
 from paths import data_path
 from schedule_format import schedule_from_json
 import tcl_graph as tg
@@ -27,7 +28,10 @@ STREET_NOT_FOUND = 'STREET_NOT_FOUND'
 INTERSECTION_NOT_FOUND = 'INTERSECTION_NOT_FOUND'
 UNSUPPORTED_RULE_TYPE = 'UNSUPPORTED_RULE_TYPE'
 GEOMETRY_ERROR = 'GEOMETRY_ERROR'
+ZERO_SPAN = 'ZERO_SPAN'
 DISCONNECTED_BLOCK = 'DISCONNECTED_BLOCK'
+
+_ZERO_SPAN_DETAIL = 'anchor equals terminus; no mappable span'
 AMBIGUOUS_INTERSECTION = 'AMBIGUOUS_INTERSECTION'
 
 BLOCK_FAMILY_RULES = frozenset({
@@ -35,6 +39,7 @@ BLOCK_FAMILY_RULES = frozenset({
     'block_to_terminus',
     'parenthetical_block',
     'parenthetical_end_block',
+    'parenthetical_dual_block',
     'parenthetical_to_terminus',
 })
 
@@ -53,6 +58,7 @@ SUPPORTED_RULE_TYPES = frozenset({
     'terminus_to_terminus',
     'parenthetical_block',
     'parenthetical_end_block',
+    'parenthetical_dual_block',
     'parenthetical_to_terminus',
     'intersect_extension',
     'perfect_offset',
@@ -169,6 +175,9 @@ def _init_indexes(ix_gdf: gpd.GeoDataFrame, st_gdf: gpd.GeoDataFrame) -> None:
     _timing['street_index'] = time.perf_counter() - t0
     print(f"   Indexed {len(street_index)} streets.")
 
+    thr.build_index_from_csv(legal_keys=set(street_graphs.keys()))
+    print(f"   Highway suffix-resolve index ready ({thr.legal_key_count()} legals).")
+
 
 _ix_gdf, _st_gdf = _load_tcl()
 _init_indexes(_ix_gdf, _st_gdf)
@@ -269,12 +278,12 @@ def intersection_dist_with_qualifier(
 
 def get_local_street_geometry(street_name: str) -> LineString | None:
     """O(1) lookup in pre-built street index."""
-    return street_index.get(tcl_highway_key(street_name))
+    return street_index.get(thr.tcl_lookup_key(street_name))
 
 
 def get_street_line_meters(highway: str) -> LineString | None:
     """Cached EPSG:32617 centreline for a highway."""
-    s_name = tcl_highway_key(highway)
+    s_name = thr.tcl_lookup_key(highway)
     cached = street_metre_index.get(s_name)
     if cached is not None:
         return cached
@@ -354,7 +363,7 @@ def find_intersection_ids(highway: str, cross: str) -> list[int]:
 
 
 def _street_graph(highway: str) -> StreetGraph | None:
-    return street_graphs.get(tcl_highway_key(highway))
+    return street_graphs.get(thr.tcl_lookup_key(highway))
 
 
 def _path_result_to_slice(pick: PathPick) -> SliceResult:
@@ -391,6 +400,7 @@ def _pick_qualified_block(
     *,
     start_qualifier: str | None = None,
     end_qualifier: str | None = None,
+    bylaw_highway: str | None = None,
 ) -> PathPick | SliceResult:
     start_ids = find_intersection_ids(highway, cross_start)
     end_ids = find_intersection_ids(highway, cross_end)
@@ -403,66 +413,24 @@ def _pick_qualified_block(
             None, INTERSECTION_NOT_FOUND, f'end_intersection={cross_end}',
         )
 
-    best: PathPick | None = None
-    tied = False
-
-    for id_s in start_ids:
-        for id_e in end_ids:
-            if id_s == id_e:
-                continue
-            path = tg.shortest_path(graph, id_s, id_e)
-            if path is None:
-                continue
-            line_m = tg.path_to_linestring(path, id_s, id_e, use_meters=True)
-
-            if start_qualifier:
-                picked_s = tg.pick_id_with_qualifier(
-                    highway, cross_start, start_qualifier, line_m,
-                )
-                if picked_s is None:
-                    return SliceResult(
-                        None, AMBIGUOUS_INTERSECTION,
-                        f'start_intersection={cross_start}',
-                    )
-                if picked_s != id_s:
-                    continue
-
-            if end_qualifier:
-                picked_e = tg.pick_id_with_qualifier(
-                    highway, cross_end, end_qualifier, line_m,
-                )
-                if picked_e is None:
-                    return SliceResult(
-                        None, AMBIGUOUS_INTERSECTION,
-                        f'end_intersection={cross_end}',
-                    )
-                if picked_e != id_e:
-                    continue
-
-            length = tg.path_length_m(path)
-            candidate = PathPick(id_s, id_e, path, length)
-            if best is None:
-                best = candidate
-                tied = False
-                continue
-            if len(path) < len(best.edges):
-                best = candidate
-                tied = False
-            elif len(path) == len(best.edges):
-                if length < best.length_m - 1e-3:
-                    best = candidate
-                    tied = False
-                elif abs(length - best.length_m) < 1e-3:
-                    tied = True
-
-    if best is None:
+    leg_compass = thr.highway_leg_compass(bylaw_highway or '')
+    pick, tied = tg.pick_qualified_block_path(
+        graph,
+        highway,
+        cross_start,
+        cross_end,
+        start_qualifier=start_qualifier,
+        end_qualifier=end_qualifier,
+        leg_compass=leg_compass,
+    )
+    if pick is None:
         return _block_pair_failure(highway, cross_start, cross_end)
     if tied:
         return SliceResult(
             None, AMBIGUOUS_INTERSECTION,
             f'{cross_start} to {cross_end}',
         )
-    return best
+    return pick
 
 
 def slice_block_path(
@@ -472,6 +440,7 @@ def slice_block_path(
     *,
     start_qualifier: str | None = None,
     end_qualifier: str | None = None,
+    bylaw_highway: str | None = None,
 ) -> SliceResult:
     graph = _street_graph(highway)
     if graph is None:
@@ -482,6 +451,7 @@ def slice_block_path(
             graph, highway, cross_start, cross_end,
             start_qualifier=start_qualifier,
             end_qualifier=end_qualifier,
+            bylaw_highway=bylaw_highway,
         )
         if isinstance(picked, SliceResult):
             return picked
@@ -566,7 +536,7 @@ def slice_block_to_terminus_path(
 
     geom = tg.slice_path_between(best_path, best_start, best_end)
     if geom.is_empty or geom.length == 0:
-        return SliceResult(None, GEOMETRY_ERROR, 'zero-length segment')
+        return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
     return SliceResult(geom)
 
 
@@ -587,8 +557,14 @@ def slice_between_distances(
 # --- THE GEOMETRY ENGINE ---
 
 
-def slice_street(highway, parsed_data) -> SliceResult:
+def slice_street(
+    highway,
+    parsed_data,
+    *,
+    bylaw_highway: str | None = None,
+) -> SliceResult:
     rule_type = parsed_data.get('rule_type')
+    display_highway = bylaw_highway or highway
 
     if rule_type not in SUPPORTED_RULE_TYPES:
         detail = rule_type if rule_type else f"rule_type={rule_type!r}"
@@ -596,13 +572,14 @@ def slice_street(highway, parsed_data) -> SliceResult:
 
     if rule_type in BLOCK_FAMILY_RULES:
         if _street_graph(highway) is None:
-            return SliceResult(None, STREET_NOT_FOUND, str(highway))
+            return SliceResult(None, STREET_NOT_FOUND, str(display_highway))
         try:
             if rule_type == 'block':
                 return slice_block_path(
                     highway,
                     parsed_data.get('start_intersection'),
                     parsed_data.get('end_intersection'),
+                    bylaw_highway=display_highway,
                 )
             if rule_type == 'block_to_terminus':
                 return slice_block_to_terminus_path(
@@ -616,6 +593,7 @@ def slice_street(highway, parsed_data) -> SliceResult:
                     parsed_data.get('start_intersection'),
                     parsed_data.get('end_intersection'),
                     start_qualifier=parsed_data.get('start_intersection_qualifier'),
+                    bylaw_highway=display_highway,
                 )
             if rule_type == 'parenthetical_end_block':
                 return slice_block_path(
@@ -623,6 +601,16 @@ def slice_street(highway, parsed_data) -> SliceResult:
                     parsed_data.get('start_intersection'),
                     parsed_data.get('end_intersection'),
                     end_qualifier=parsed_data.get('end_intersection_qualifier'),
+                    bylaw_highway=display_highway,
+                )
+            if rule_type == 'parenthetical_dual_block':
+                return slice_block_path(
+                    highway,
+                    parsed_data.get('start_intersection'),
+                    parsed_data.get('end_intersection'),
+                    start_qualifier=parsed_data.get('start_intersection_qualifier'),
+                    end_qualifier=parsed_data.get('end_intersection_qualifier'),
+                    bylaw_highway=display_highway,
                 )
             if rule_type == 'parenthetical_to_terminus':
                 return slice_block_to_terminus_path(
@@ -636,7 +624,7 @@ def slice_street(highway, parsed_data) -> SliceResult:
 
     street_line_gps = get_local_street_geometry(highway)
     if not street_line_gps:
-        return SliceResult(None, STREET_NOT_FOUND, str(highway))
+        return SliceResult(None, STREET_NOT_FOUND, str(display_highway))
 
     try:
         street_line_m = get_street_line_meters(highway)
@@ -816,7 +804,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
         return failure(GEOMETRY_ERROR, 'missing or empty rule_type')
 
     try:
-        result = slice_street(highway, parsed)
+        result = slice_street(highway, parsed, bylaw_highway=display_highway)
     except Exception as e:
         return failure(GEOMETRY_ERROR, str(e)[:500])
 

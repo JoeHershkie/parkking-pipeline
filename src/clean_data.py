@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -52,8 +53,6 @@ SCHEDULE_CATEGORY_BY_NAME = {
 UNPACK_PARSE_ERROR = 'UNPACK_PARSE_ERROR'
 UNPACK_EMPTY_TABLE = 'UNPACK_EMPTY_TABLE'
 UNPACK_MISSING_HIGHWAY = 'UNPACK_MISSING_HIGHWAY'
-DUPLICATE_RULE = 'DUPLICATE_RULE'
-
 OUTPUT_COLUMNS = [
     '_id',
     'scheduleName',
@@ -128,6 +127,10 @@ def prohibited_times(fields: dict):
     """Map API fields to the single prohibited-times column used downstream."""
     prohibited = fields.get('Prohibited Times and/or Days')
     times = fields.get('Times and/or Days')
+    if _is_blank(prohibited) and _is_blank(times):
+        between = fields.get('Between')
+        if between and re.search(r'\banytime\b', str(between), re.IGNORECASE):
+            return 'Anytime'
     if _is_blank(prohibited):
         return times
     if _is_blank(times):
@@ -174,7 +177,7 @@ def unpack_rows(active: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
 
 
 def deduplicate_rules(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    """Keep the lowest _id per DEDUP_KEYS group; log dropped rows to the failure ledger."""
+    """Keep the lowest _id per DEDUP_KEYS group; drop later duplicates (not ledger failures)."""
     work = df.copy()
     work['_dedup_key'] = work[DEDUP_KEYS].apply(
         lambda row: tuple(_norm_cell(v) for v in row),
@@ -186,22 +189,10 @@ def deduplicate_rules(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         work.sort_values(['_id_num', '_id'], na_position='last')
         .drop_duplicates(subset=['_dedup_key'], keep='first')
     )
-    keeper_ids = keepers.set_index('_dedup_key')['_id']
     kept_idx = keepers.index
-    dropped = work.loc[~work.index.isin(kept_idx)]
+    dropped_count = len(work) - len(keepers)
 
-    for _, row in dropped.iterrows():
-        keeper_id = keeper_ids[row['_dedup_key']]
-        record_failure(
-            row['_id'],
-            'clean',
-            DUPLICATE_RULE,
-            f'duplicate of kept _id={keeper_id}',
-            row.get('Highway', ''),
-            row.get('Between', ''),
-        )
-
-    return df.loc[kept_idx].copy(), len(dropped)
+    return df.loc[kept_idx].copy(), dropped_count
 
 
 def load_active_rules() -> pd.DataFrame:
@@ -248,8 +239,6 @@ def main() -> None:
 
     before_dedup = len(clean_df)
     clean_df, dup_dropped = deduplicate_rules(clean_df)
-    if dup_dropped:
-        failure_counts[DUPLICATE_RULE] = dup_dropped
 
     clean_df.to_csv(data_path('clean_parking_targets.csv'), index=False)
     _print_summary(

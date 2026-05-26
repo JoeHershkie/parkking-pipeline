@@ -298,14 +298,40 @@ def _disambiguate_project_dist(projects: list[float], qualifier: str) -> float |
     return None
 
 
+def graph_components(graph: StreetGraph) -> list[frozenset[int]]:
+    """Connected node sets in *graph*."""
+    seen: set[int] = set()
+    out: list[frozenset[int]] = []
+    for start in graph.adj:
+        if start in seen:
+            continue
+        component: set[int] = set()
+        queue: deque[int] = deque([start])
+        while queue:
+            node = queue.popleft()
+            if node in seen:
+                continue
+            seen.add(node)
+            component.add(node)
+            for neighbor, _edge in graph.adj.get(node, []):
+                if neighbor not in seen:
+                    queue.append(neighbor)
+        out.append(frozenset(component))
+    return out
+
+
 def pick_id_with_qualifier(
     highway: str,
     cross: str,
     qualifier: str,
     path_line_m: LineString,
+    *,
+    allowed_ids: frozenset[int] | None = None,
 ) -> int | None:
-    """Pick one intersection ID using compass qualifier on a candidate path."""
+    """Pick one intersection ID using compass qualifier on a reference centreline."""
     ids = resolve_intersection_ids(highway, cross)
+    if allowed_ids is not None:
+        ids = [node_id for node_id in ids if node_id in allowed_ids]
     if not ids:
         return None
     if len(ids) == 1 or not qualifier:
@@ -329,6 +355,106 @@ def pick_id_with_qualifier(
         if abs(proj - chosen) < 1e-3:
             return node_id
     return ids[projects.index(chosen)]
+
+
+def _component_centroid_m(graph: StreetGraph, node_id: int) -> tuple[float, float] | None:
+    line_m = component_linestring_m(graph, node_id)
+    if line_m is None or line_m.is_empty:
+        return None
+    c = line_m.centroid
+    return float(c.x), float(c.y)
+
+
+def pick_qualified_block_path(
+    graph: StreetGraph,
+    highway: str,
+    cross_start: str,
+    cross_end: str,
+    *,
+    start_qualifier: str | None = None,
+    end_qualifier: str | None = None,
+    leg_compass: str | None = None,
+) -> tuple[PathPick | None, bool]:
+    """
+    Resolve a block using intersection qualifiers on each graph component.
+
+    Returns ``(pick, tied)`` where *tied* is true when multiple equally good picks remain.
+    """
+    start_ids_all = resolve_intersection_ids(highway, cross_start)
+    end_ids_all = resolve_intersection_ids(highway, cross_end)
+    if not start_ids_all:
+        return None, False
+    if not end_ids_all:
+        return None, False
+
+    candidates: list[PathPick] = []
+    for comp in graph_components(graph):
+        start_ids = [i for i in start_ids_all if i in comp]
+        end_ids = [i for i in end_ids_all if i in comp]
+        if not start_ids or not end_ids:
+            continue
+
+        anchor = start_ids[0]
+        line_m = component_linestring_m(graph, anchor)
+        if line_m is None or line_m.is_empty:
+            continue
+
+        if start_qualifier:
+            id_s = pick_id_with_qualifier(
+                highway, cross_start, start_qualifier, line_m,
+                allowed_ids=comp,
+            )
+        elif len(start_ids) == 1:
+            id_s = start_ids[0]
+        else:
+            id_s = None
+
+        if end_qualifier:
+            id_e = pick_id_with_qualifier(
+                highway, cross_end, end_qualifier, line_m,
+                allowed_ids=comp,
+            )
+        elif len(end_ids) == 1:
+            id_e = end_ids[0]
+        else:
+            id_e = None
+
+        if id_s is None or id_e is None or id_s == id_e:
+            continue
+
+        path = shortest_path(graph, id_s, id_e)
+        if path is None:
+            continue
+
+        candidates.append(
+            PathPick(id_s, id_e, path, path_length_m(path)),
+        )
+
+    if not candidates:
+        return None, False
+
+    def rank_key(pick: PathPick) -> tuple[float, int, float]:
+        centroid = _component_centroid_m(graph, pick.id_start)
+        if centroid is None:
+            compass_rank = 0.0
+        else:
+            easting, northing = centroid
+            if leg_compass in ('south', 'southern'):
+                compass_rank = northing
+            elif leg_compass in ('north', 'northern'):
+                compass_rank = -northing
+            elif leg_compass in ('east', 'eastern'):
+                compass_rank = -easting
+            elif leg_compass in ('west', 'western'):
+                compass_rank = easting
+            else:
+                compass_rank = 0.0
+        return (compass_rank, len(pick.edges), pick.length_m)
+
+    candidates.sort(key=rank_key)
+    best = candidates[0]
+    tied = len(candidates) > 1 and rank_key(candidates[1]) == rank_key(best)
+    return best, tied
 
 
 def connected_component_edges(graph: StreetGraph, start_id: int) -> list[StreetEdge]:

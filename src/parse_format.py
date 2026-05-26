@@ -8,7 +8,7 @@ import re
 import pandas as pd
 
 from intersection_normalize import apply_street_alias
-from tcl_highway_key import tcl_highway_key
+from tcl_highway_resolve import tcl_lookup_key
 
 PARSE_COLUMNS = [
     'rule_type',
@@ -58,6 +58,7 @@ _RULE_REQUIRED_STRINGS: dict[str, tuple[str, ...]] = {
     'terminus_to_terminus': ('terminus_start_dir', 'terminus_end_dir', 'terminus_street'),
     'parenthetical_block': ('start_intersection', 'end_intersection'),
     'parenthetical_end_block': ('start_intersection', 'end_intersection'),
+    'parenthetical_dual_block': ('start_intersection', 'end_intersection'),
     'parenthetical_to_terminus': ('start_intersection', 'terminus_direction'),
     'intersect_extension': ('start_intersection', 'direction'),
     'perfect_offset': ('start_intersection', 'direction'),
@@ -147,6 +148,41 @@ def _starts_with_a_point(text: str) -> bool:
     return bool(re.match(r'^a point\b', text.strip(), re.IGNORECASE))
 
 
+_TRAILING_PAREN_QUAL_RE = re.compile(
+    r'^(?P<name>.+?)\s*\((?P<qualifier>[^)]+)\)\s*$',
+)
+
+_INTERSECTION_QUALIFIER_FIELDS = {
+    'start_intersection': 'start_intersection_qualifier',
+    'end_intersection': 'end_intersection_qualifier',
+    'offset_intersection': 'offset_intersection_qualifier',
+}
+
+
+def split_trailing_qualifier(anchor: str) -> tuple[str, str | None]:
+    """Split 'Street Name (north intersection)' into name and qualifier."""
+    text = str(anchor).strip()
+    if not text:
+        return '', None
+    m = _TRAILING_PAREN_QUAL_RE.match(text)
+    if not m:
+        return text, None
+    return m.group('name').strip(), m.group('qualifier').strip()
+
+
+def apply_trailing_qualifiers(parsed: dict) -> dict:
+    """Move trailing parenthetical qualifiers off anchor fields."""
+    out = dict(parsed)
+    for anchor_key, qual_key in _INTERSECTION_QUALIFIER_FIELDS.items():
+        if anchor_key not in out or _is_empty(out.get(anchor_key)):
+            continue
+        name, qual = split_trailing_qualifier(str(out[anchor_key]))
+        out[anchor_key] = name
+        if qual and _is_empty(out.get(qual_key)):
+            out[qual_key] = qual
+    return out
+
+
 def _float_ok(val, *, field: str) -> tuple[bool, str]:
     try:
         f = float(val)
@@ -191,23 +227,27 @@ def validate_parsed(parsed: dict) -> tuple[bool, str]:
         if not ok:
             return False, err
 
-    if rule_type in ('perfect_offset', 'intersect_extension', 'intersect_to_offset', 'offset_to_intersect'):
-        ok, err = _direction_ok(parsed.get('direction'), field='direction')
+    if rule_type in (
+        'perfect_offset', 'intersect_extension', 'intersect_to_offset', 'offset_to_intersect',
+    ):
+        ok, err = _direction_ok(
+            parsed.get('direction'), field='direction', allow_compass=True,
+        )
         if not ok:
             return False, err
 
     if rule_type in ('relative_extension', 'offset_span'):
-        ok, err = _direction_ok(parsed.get('dir1'), field='dir1')
+        ok, err = _direction_ok(parsed.get('dir1'), field='dir1', allow_compass=True)
         if not ok:
             return False, err
         if rule_type == 'offset_span' and not _is_empty(parsed.get('dir2')):
-            ok, err = _direction_ok(parsed.get('dir2'), field='dir2')
+            ok, err = _direction_ok(parsed.get('dir2'), field='dir2', allow_compass=True)
             if not ok:
                 return False, err
 
     if rule_type == 'dual_anchor':
         for key in ('dir1', 'dir2'):
-            ok, err = _direction_ok(parsed.get(key), field=key)
+            ok, err = _direction_ok(parsed.get(key), field=key, allow_compass=True)
             if not ok:
                 return False, err
 
@@ -219,6 +259,11 @@ def validate_parsed(parsed: dict) -> tuple[bool, str]:
         )
         if not ok:
             return False, err
+
+    if rule_type == 'parenthetical_dual_block':
+        for key in ('start_intersection_qualifier', 'end_intersection_qualifier'):
+            if _is_empty(parsed.get(key)):
+                return False, f'missing {key}'
 
     if rule_type == 'terminus_to_terminus':
         for key in ('terminus_start_dir', 'terminus_end_dir'):
@@ -277,7 +322,7 @@ def row_to_parsed(row) -> dict:
 def highway_from_row(row) -> str:
     """Highway key for TCL centreline lookup (``LINEAR_NAME_FULL_LEGAL``, lowercased).
 
-    Applies ``tcl_highway_key`` (borough suffix and ``St.`` punctuation). Does not use
-    ``highway_norm`` — that column abbreviates types for INTERSECTION_DESC search.
+    Applies ``tcl_lookup_key`` (borough suffix, ``St.`` punctuation, suffix remap).
+    Does not use ``highway_norm`` — that column abbreviates types for INTERSECTION_DESC search.
     """
-    return tcl_highway_key(str(_row_get(row, 'Highway') or ''))
+    return tcl_lookup_key(str(_row_get(row, 'Highway') or ''))
