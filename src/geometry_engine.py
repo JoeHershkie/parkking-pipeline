@@ -16,7 +16,13 @@ from shapely.ops import linemerge, substring, transform
 from failure_ledger import clear_stage, record_failure
 import geo_cache as gc
 import intersection_index as ix_index
-from parse_format import _parse_valid_flag, highway_from_row, row_to_parsed
+from lane_highway_resolve import (
+    _freeze_parsed,
+    is_lane_placeholder_highway,
+    lookup_highway_key,
+    lookup_highway_key_fast,
+)
+from parse_format import PARSE_COLUMNS, _parse_valid_flag, highway_from_row, row_to_parsed
 from tcl_highway_key import tcl_highway_key
 import tcl_highway_resolve as thr
 from paths import data_path
@@ -32,6 +38,7 @@ ZERO_SPAN = 'ZERO_SPAN'
 DISCONNECTED_BLOCK = 'DISCONNECTED_BLOCK'
 
 _ZERO_SPAN_DETAIL = 'anchor equals terminus; no mappable span'
+_COLLAPSE_TOL_M = 1e-3
 AMBIGUOUS_INTERSECTION = 'AMBIGUOUS_INTERSECTION'
 
 BLOCK_FAMILY_RULES = frozenset({
@@ -55,6 +62,7 @@ SUPPORTED_RULE_TYPES = frozenset({
     'entire_length',
     'block',
     'block_to_terminus',
+    'terminus_end_metric',
     'terminus_to_terminus',
     'parenthetical_block',
     'parenthetical_end_block',
@@ -205,29 +213,32 @@ def find_intersection(street_1: str, street_2: str) -> Point | None:
 
 
 def _terminus_dist_on_line(line_m: LineString, direction: str) -> float:
-    """Centreline distance to the end of the line in the stated compass direction."""
+    """Along-line distance to the point on *line_m* that lies farthest in *direction* (UTM)."""
     direction = str(direction).lower().strip()
     if line_m.length == 0:
         return 0.0
 
-    samples = 21
-    dists = [
-        line_m.interpolate(i / (samples - 1) * line_m.length)
-        for i in range(samples)
+    n = 21
+    samples = [
+        line_m.interpolate(i / (n - 1) * line_m.length)
+        for i in range(n)
     ]
-    projects = [line_m.project(p) for p in dists]
+    for coord in (line_m.coords[0], line_m.coords[-1]):
+        samples.append(Point(coord))
 
     if direction in _WEST_DIRS:
-        return min(projects)
+        pt = min(samples, key=lambda p: p.x)
+        return line_m.project(pt)
     if direction in _EAST_DIRS:
-        return max(projects)
+        pt = max(samples, key=lambda p: p.x)
+        return line_m.project(pt)
     if direction in _NORTH_DIRS:
-        north_pt = max(dists, key=lambda p: p.y)
-        return line_m.project(north_pt)
+        pt = max(samples, key=lambda p: p.y)
+        return line_m.project(pt)
     if direction in _SOUTH_DIRS:
-        south_pt = min(dists, key=lambda p: p.y)
-        return line_m.project(south_pt)
-    return max(projects)
+        pt = min(samples, key=lambda p: p.y)
+        return line_m.project(pt)
+    return line_m.project(max(samples, key=lambda p: p.x))
 
 
 def _disambiguate_project_dist(
@@ -337,6 +348,156 @@ def signed_offset_dist(
 ) -> float:
     sign = offset_sign(line_m, anchor_dist, direction)
     return _clamp_dist(line_m, anchor_dist + sign * distance_m)
+
+
+def _signed_offset_raw(
+    line_m: LineString, anchor_dist: float, distance_m: float, direction: str,
+) -> float:
+    sign = offset_sign(line_m, anchor_dist, direction)
+    return anchor_dist + sign * distance_m
+
+
+def _line_m_and_dist_for_cross(
+    highway: str, cross: str,
+) -> tuple[LineString, float] | tuple[None, str]:
+    """Centreline (local graph component when possible) and along-line distance."""
+    graph = _street_graph(highway)
+    pt_m = _intersection_point_meters(highway, cross)
+    if pt_m is None:
+        return None, str(cross)
+
+    if graph is not None:
+        ids = find_intersection_ids(highway, cross)
+        if ids:
+            line_m = tg.component_linestring_m(graph, ids[0])
+            if line_m is not None and not line_m.is_empty:
+                return line_m, line_m.project(pt_m)
+
+    line_m = get_street_line_meters(highway)
+    if line_m is None:
+        return None, str(cross)
+    return line_m, line_m.project(pt_m)
+
+
+def _project_ids_on_line(
+    line_m: LineString, highway: str, cross: str,
+) -> list[float]:
+    """Sorted along-line distances for every graph node matching *cross* on *highway*."""
+    dists: list[float] = []
+    seen: set[float] = set()
+    for node_id in find_intersection_ids(highway, cross):
+        pt = tg.node_point_gps(node_id)
+        if pt is None:
+            continue
+        pt_m = transform(project_to_meters, pt)
+        d = line_m.project(pt_m)
+        key = round(d, 3)
+        if key not in seen:
+            seen.add(key)
+            dists.append(d)
+    if not dists:
+        pt_m = _intersection_point_meters(highway, cross)
+        if pt_m is not None:
+            dists.append(line_m.project(pt_m))
+    return sorted(dists)
+
+
+def _span_from_multi_ids(
+    line_m: LineString, highway: str, cross: str,
+) -> tuple[float, float] | None:
+    """When one cross name maps to multiple nodes, use min/max along-line span."""
+    dists = _project_ids_on_line(line_m, highway, cross)
+    if len(dists) >= 2 and dists[-1] - dists[0] > _COLLAPSE_TOL_M:
+        return dists[0], dists[-1]
+    return None
+
+
+def _offset_point_dist(
+    line_m: LineString, anchor_dist: float, distance_m: float, direction: str,
+) -> float:
+    """
+    Along-line distance to 'a point {distance} {direction} of' anchor at *anchor_dist*.
+
+    When the raw offset falls past the component end, use the inbound distance from
+    the anchor (cul-de-sac / terminus clamp cases).
+    """
+    sign = offset_sign(line_m, anchor_dist, direction)
+    raw = anchor_dist + sign * float(distance_m)
+    length = line_m.length
+    if -1e-6 <= raw <= length + 1e-6:
+        return raw
+    return max(0.0, anchor_dist - sign * float(distance_m))
+
+
+def _slice_component_distances(
+    highway: str, line_m: LineString, d0: float, d1: float,
+) -> SliceResult:
+    if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
+        return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
+    line_gps = transform(project_to_gps, line_m)
+    return slice_between_distances(line_gps, line_m, d0, d1)
+
+
+def _graph_slice_between_crosses(
+    highway: str, cross_a: str, cross_b: str,
+) -> SliceResult | None:
+    """Graph path between two cross streets when centreline projection collapses."""
+    graph = _street_graph(highway)
+    if graph is None:
+        return None
+    pick = tg.pick_intersection_pair(graph, highway, cross_a, cross_b)
+    if pick is None or pick.length_m < _COLLAPSE_TOL_M:
+        return None
+    return _path_result_to_slice(pick)
+
+
+def _recover_collapsed_offset_span(
+    highway: str,
+    line_m: LineString,
+    d0: float,
+    d1: float,
+    *,
+    cross_a: str | None = None,
+    cross_b: str | None = None,
+) -> SliceResult | None:
+    """Try multi-node span or graph path when metric projection equals anchor."""
+    if not math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
+        return None
+    if cross_a and cross_b and cross_a.strip().lower() != cross_b.strip().lower():
+        graph_hit = _graph_slice_between_crosses(highway, cross_a, cross_b)
+        if graph_hit is not None and graph_hit.ok:
+            return graph_hit
+    for cross in (cross_a, cross_b):
+        if not cross:
+            continue
+        span = _span_from_multi_ids(line_m, highway, cross)
+        if span is not None:
+            return _slice_component_distances(highway, line_m, span[0], span[1])
+    return None
+
+
+def _relative_extension_distances(
+    line_m: LineString,
+    base_dist: float,
+    dist1: float,
+    dist2: float,
+    dir1: str,
+) -> tuple[float, float]:
+    sign = offset_sign(line_m, base_dist, dir1)
+    raw_d0 = base_dist + sign * dist1
+    raw_d1 = base_dist + sign * (dist1 + dist2)
+    d0 = _clamp_dist(line_m, raw_d0)
+    d1 = _clamp_dist(line_m, raw_d1)
+    if math.isclose(d0, d1, abs_tol=1e-3):
+        length = line_m.length
+        if raw_d0 < -1e-6 and raw_d1 < -1e-6:
+            d0 = 0.0
+            d1 = min(length, dist1 + dist2)
+        elif raw_d0 > length + 1e-6 and raw_d1 > length + 1e-6:
+            span = dist1 + dist2
+            d1 = length
+            d0 = max(0.0, length - span)
+    return d0, d1
 
 
 @lru_cache(maxsize=32768)
@@ -528,6 +689,21 @@ def slice_block_to_terminus_path(
             best_start = id_s
             best_end = end_id
 
+    if best_len < 1e-3:
+        for id_s in start_ids:
+            far_id = tg.farthest_node_in_component(graph, id_s)
+            if far_id is None or far_id == id_s:
+                continue
+            path = tg.shortest_path(graph, id_s, far_id)
+            if path is None:
+                continue
+            line_m = tg.path_to_linestring(path, id_s, far_id, use_meters=True)
+            if line_m.length > best_len:
+                best_len = line_m.length
+                best_path = path
+                best_start = id_s
+                best_end = far_id
+
     if best_path is None or best_start is None or best_end is None:
         return SliceResult(
             None, DISCONNECTED_BLOCK,
@@ -543,8 +719,8 @@ def slice_block_to_terminus_path(
 def slice_between_distances(
     line_gps: LineString, line_m: LineString, d0: float, d1: float,
 ) -> SliceResult:
-    if math.isclose(d0, d1, abs_tol=1e-3):
-        return SliceResult(None, GEOMETRY_ERROR, 'zero-length segment')
+    if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
+        return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
 
     lo, hi = (d0, d1) if d0 <= d1 else (d1, d0)
     sliced_m = substring(line_m, lo, hi)
@@ -641,131 +817,179 @@ def slice_street(
             )
             return slice_between_distances(street_line_gps, street_line_m, d0, d1)
 
-        if rule_type in ('perfect_offset', 'intersect_extension'):
-            start_intersection = parsed_data.get('start_intersection')
-            d0, err = intersection_dist_on_street(highway, start_intersection, street_line_m)
+        if rule_type == 'terminus_end_metric':
+            terminus_street = parsed_data.get('terminus_street')
+            line_m, err = _line_m_and_dist_for_cross(highway, terminus_street)
             if err:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"terminus_street={err}",
                 )
-
+            d0 = _terminus_dist_on_line(line_m, parsed_data.get('terminus_direction', ''))
             distance = float(parsed_data.get('distance', 0))
             direction = parsed_data.get('direction', '')
-            d1 = signed_offset_dist(street_line_m, d0, distance, direction)
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            d1 = _offset_point_dist(line_m, d0, distance, direction)
+            return _slice_component_distances(highway, line_m, d0, d1)
+
+        if rule_type in ('perfect_offset', 'intersect_extension'):
+            start_intersection = parsed_data.get('start_intersection')
+            line_m, anchor = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
+                return SliceResult(
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={anchor}",
+                )
+            distance = float(parsed_data.get('distance', 0))
+            direction = parsed_data.get('direction', '')
+            d0 = anchor
+            d1 = _offset_point_dist(line_m, anchor, distance, direction)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, d0, d1, cross_a=start_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, d0, d1)
 
         if rule_type == 'intersect_to_offset':
             start_intersection = parsed_data.get('start_intersection')
-            d0, err = intersection_dist_on_street(highway, start_intersection, street_line_m)
-            if err:
-                return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
-                )
-
             offset_intersection = parsed_data.get('offset_intersection')
-            anchor_dist, err = intersection_dist_on_street(
-                highway, offset_intersection, street_line_m,
-            )
-            if err:
+            line_m, d0 = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"offset_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={d0}",
                 )
-
+            pt_m = _intersection_point_meters(highway, offset_intersection)
+            if pt_m is None:
+                return SliceResult(
+                    None, INTERSECTION_NOT_FOUND,
+                    f"offset_intersection={offset_intersection}",
+                )
+            anchor_dist = line_m.project(pt_m)
             distance = float(parsed_data.get('distance', 0))
             direction = parsed_data.get('direction', '')
-            d1 = signed_offset_dist(street_line_m, anchor_dist, distance, direction)
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            d1 = _offset_point_dist(line_m, anchor_dist, distance, direction)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, d0, d1,
+                cross_a=start_intersection,
+                cross_b=offset_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, d0, d1)
 
         if rule_type == 'offset_to_intersect':
             start_intersection = parsed_data.get('start_intersection')
-            anchor_dist, err = intersection_dist_on_street(
-                highway, start_intersection, street_line_m,
-            )
-            if err:
+            end_intersection = parsed_data.get('end_intersection')
+            line_m, anchor = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={anchor}",
                 )
-
             distance = float(parsed_data.get('distance', 0))
             direction = parsed_data.get('direction', '')
-            d0 = signed_offset_dist(street_line_m, anchor_dist, distance, direction)
-
-            end_intersection = parsed_data.get('end_intersection')
-            d1, err = intersection_dist_on_street(highway, end_intersection, street_line_m)
-            if err:
+            d0 = _offset_point_dist(line_m, anchor, distance, direction)
+            pt_m = _intersection_point_meters(highway, end_intersection)
+            if pt_m is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"end_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"end_intersection={end_intersection}",
                 )
-
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            d1 = line_m.project(pt_m)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, d0, d1,
+                cross_a=start_intersection,
+                cross_b=end_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, d0, d1)
 
         if rule_type == 'relative_extension':
             start_intersection = parsed_data.get('start_intersection')
-            base_dist, err = intersection_dist_on_street(
-                highway, start_intersection, street_line_m,
-            )
-            if err:
+            line_m, base_dist = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={base_dist}",
                 )
+            line_gps = transform(project_to_gps, line_m)
 
             dist1 = float(parsed_data.get('dist1', 0))
             dist2 = float(parsed_data.get('dist2', 0))
             dir1 = parsed_data.get('dir1', '')
-            sign = offset_sign(street_line_m, base_dist, dir1)
-            d0 = _clamp_dist(street_line_m, base_dist + sign * dist1)
-            d1 = _clamp_dist(street_line_m, base_dist + sign * (dist1 + dist2))
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            d0, d1 = _relative_extension_distances(line_m, base_dist, dist1, dist2, dir1)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, d0, d1, cross_a=start_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, d0, d1)
 
         if rule_type == 'offset_span':
             start_intersection = parsed_data.get('start_intersection')
-            base_dist, err = intersection_dist_on_street(
-                highway, start_intersection, street_line_m,
-            )
-            if err:
+            line_m, base_dist = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={base_dist}",
                 )
-
             dist1 = float(parsed_data.get('dist1', 0))
             dist2 = float(parsed_data.get('dist2', 0))
             dir1 = parsed_data.get('dir1', '')
             dir2 = parsed_data.get('dir2', dir1)
-            sign1 = offset_sign(street_line_m, base_dist, dir1)
-            sign2 = offset_sign(street_line_m, base_dist, dir2)
-            d0 = _clamp_dist(street_line_m, base_dist + sign1 * dist1)
-            d1 = _clamp_dist(street_line_m, base_dist + sign2 * dist2)
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            d0 = _offset_point_dist(line_m, base_dist, dist1, dir1)
+            d1 = _offset_point_dist(line_m, base_dist, dist2, dir2)
+            lo, hi = (d0, d1) if d0 <= d1 else (d1, d0)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, lo, hi, cross_a=start_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, lo, hi)
 
         if rule_type == 'dual_anchor':
             start_intersection = parsed_data.get('start_intersection')
-            anchor0, err = intersection_dist_on_street(
-                highway, start_intersection, street_line_m,
-            )
-            if err:
+            end_intersection = parsed_data.get('end_intersection')
+            line0, anchor0 = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line0 is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"start_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={anchor0}",
                 )
-            d0 = signed_offset_dist(
-                street_line_m, anchor0,
+            d0 = _offset_point_dist(
+                line0, anchor0,
                 float(parsed_data.get('dist1', 0)),
                 parsed_data.get('dir1', ''),
             )
 
-            end_intersection = parsed_data.get('end_intersection')
-            anchor1, err = intersection_dist_on_street(
-                highway, end_intersection, street_line_m,
-            )
-            if err:
+            line1, anchor1 = _line_m_and_dist_for_cross(highway, end_intersection)
+            if line1 is None:
                 return SliceResult(
-                    None, INTERSECTION_NOT_FOUND, f"end_intersection={err}",
+                    None, INTERSECTION_NOT_FOUND, f"end_intersection={anchor1}",
                 )
-            d1 = signed_offset_dist(
-                street_line_m, anchor1,
+            d1 = _offset_point_dist(
+                line1, anchor1,
                 float(parsed_data.get('dist2', 0)),
                 parsed_data.get('dir2', ''),
             )
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+
+            if line0.equals(line1):
+                lo, hi = (d0, d1) if d0 <= d1 else (d1, d0)
+                recovered = _recover_collapsed_offset_span(
+                    highway, line0, lo, hi,
+                    cross_a=start_intersection,
+                    cross_b=end_intersection,
+                )
+                if recovered is not None:
+                    return recovered
+                return _slice_component_distances(highway, line0, lo, hi)
+
+            pt0 = line0.interpolate(max(0.0, min(d0, line0.length)))
+            pt1 = line1.interpolate(max(0.0, min(d1, line1.length)))
+            d0m = street_line_m.project(pt0)
+            d1m = street_line_m.project(pt1)
+            recovered = _recover_collapsed_offset_span(
+                highway, street_line_m, d0m, d1m,
+                cross_a=start_intersection,
+                cross_b=end_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return slice_between_distances(street_line_gps, street_line_m, d0m, d1m)
 
     except Exception as e:
         return SliceResult(None, GEOMETRY_ERROR, str(e)[:500])
@@ -782,9 +1006,12 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
     columns, values = args
     row_s = _row_series_from_values(columns, values)
     row_id = row_s['_id']
-    highway = highway_from_row(row_s)
     between = row_s['Between']
-    display_highway = row_s.get('Highway', highway)
+    display_highway = row_s.get('Highway', '')
+    parsed_for_highway = row_to_parsed(row_s)
+    highway = highway_from_row(row_s)
+    if not display_highway:
+        display_highway = highway
 
     def failure(reason_code: str, detail: str) -> tuple[None, dict]:
         return None, {
@@ -799,7 +1026,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
         detail = str(row_s.get('parse_error') or 'parse_valid is false').strip()
         return failure(GEOMETRY_ERROR, detail or 'parse_valid is false')
 
-    parsed = row_to_parsed(row_s)
+    parsed = parsed_for_highway
     if not parsed.get('rule_type'):
         return failure(GEOMETRY_ERROR, 'missing or empty rule_type')
 
@@ -841,17 +1068,66 @@ _CROSS_STREET_KEYS = (
 )
 
 
+def _parsed_from_row_tuple(
+    tup: tuple,
+    col_idx: dict[str, int],
+) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for col in PARSE_COLUMNS:
+        idx = col_idx.get(col)
+        if idx is None:
+            continue
+        val = tup[idx]
+        if val is None or (isinstance(val, float) and math.isnan(val)):
+            continue
+        text = str(val).strip()
+        if text:
+            parsed[col] = text
+    return parsed
+
+
 def _intersection_lookup_pairs(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """(highway_key, cross_street) pairs for intersection index warm-up."""
+    if df.empty:
+        return []
+
+    col_idx = {c: df.columns.get_loc(c) for c in df.columns}
+    hi = col_idx.get('Highway')
+    bi = col_idx.get('Between')
+    if hi is None:
+        return []
+
+    cross_cols = [c for c in _CROSS_STREET_KEYS if c in col_idx]
+    highway_cache: dict[tuple[str, str, tuple[tuple[str, str], ...]], str] = {}
     pairs: list[tuple[str, str]] = []
-    for _, row in df.iterrows():
-        highway = highway_from_row(row)
+    thr._ensure_index()
+    legal = getattr(thr, '_legal_keys', frozenset())
+
+    for tup in df.itertuples(index=False, name=None):
+        highway_raw = str(tup[hi] or '')
+        between = str(tup[bi] or '') if bi is not None else ''
+        parsed = _parsed_from_row_tuple(tup, col_idx)
+        frozen = _freeze_parsed(parsed)
+        cache_key = (highway_raw, between, frozen)
+        highway = highway_cache.get(cache_key)
+        if highway is None:
+            if is_lane_placeholder_highway(highway_raw, between):
+                highway = lookup_highway_key(highway_raw, between, parsed or None)
+            else:
+                key = thr.resolve_tcl_highway(highway_raw)
+                if key in legal and not thr.highway_lookup_ambiguous(highway_raw):
+                    highway = key
+                else:
+                    highway = lookup_highway_key_fast(
+                        highway_raw, between, parsed or None,
+                    )
+            highway_cache[cache_key] = highway
         if not highway:
             continue
-        parsed = row_to_parsed(row)
-        for key in _CROSS_STREET_KEYS:
+        for key in cross_cols:
             cross = parsed.get(key)
             if cross:
-                pairs.append((highway, str(cross)))
+                pairs.append((highway, cross))
     return pairs
 
 

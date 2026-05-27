@@ -34,6 +34,8 @@ from schedule_format import (  # noqa: E402
         (12, 0, 'a.m.', 0),
         (12, 0, 'p.m.', 720),
         (12, 1, 'a.m.', 1),
+        (12, 0, 'noon', 720),
+        (12, 0, 'midnight', 0),
     ],
 )
 def test_time_to_minutes(hour, minute, mer, expected) -> None:
@@ -108,6 +110,13 @@ def test_semicolon_clauses() -> None:
     )
 
 
+def test_semicolon_anytime_sat_sun_no_comma() -> None:
+    text = '6:00 p.m. of one day to 8:00 a.m. of the next following day, Mon. to Fri.; Anytime Sat. and Sun.'
+    s = parse_schedule(text)
+    assert s['status'] == 'ok'
+    assert len(s['windows']) == 2
+
+
 def test_overnight() -> None:
     s = parse_schedule('6:00 a.m. of one day to 2:00 a.m. of the next day')
     assert s['status'] == 'ok'
@@ -118,16 +127,100 @@ def test_except_holidays_flag() -> None:
     s = parse_schedule('4:00 p.m. to 6:00 p.m., Mon. to Fri., except public holidays')
     assert s['status'] == 'ok'
     assert s['flags']['exceptPublicHolidays'] is True
+    weekday = {'dayOfWeek': 2, 'minuteOfDay': 1020, 'month': 6, 'dayOfMonth': 10, 'year': 2025}
+    christmas = {'dayOfWeek': 4, 'minuteOfDay': 1020, 'month': 12, 'dayOfMonth': 25, 'year': 2025}
+    assert overlaps_membership(s, weekday)
+    assert not overlaps_membership(s, christmas)
 
 
-def test_calendar_deferred_failed() -> None:
-    s = parse_schedule('Anytime, from Dec. 1 of one year to Mar. 31 of the next following year, inclusive')
-    assert s['status'] == 'failed'
+def test_seasonal_anytime_winter() -> None:
+    text = 'Anytime, from Dec. 1 of one year to Mar. 31 of the next following year, inclusive'
+    s = parse_schedule(text)
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['calendar']['monthRanges']
+    slot = {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 12, 'dayOfMonth': 15, 'year': 2024}
+    assert overlaps_membership(s, slot)
+    assert not overlaps_membership(
+        s, {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 7, 'dayOfMonth': 15, 'year': 2024},
+    )
 
 
-def test_inverted_deferred_failed() -> None:
+def test_monthly_split_apr_nov() -> None:
+    text = '16th day to the last day of each month, from Apr. 1 to Nov. 30, inclusive'
+    s = parse_schedule(text)
+    assert s['status'] == 'ok'
+    cal = s['windows'][0]['calendar']
+    assert cal['dayOfMonthRanges'] == [{'start': 16, 'end': 'last'}]
+    assert cal['monthRanges'][0]['startMonth'] == 4
+    slot_in = {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 5, 'dayOfMonth': 20, 'year': 2024}
+    slot_out = {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 5, 'dayOfMonth': 10, 'year': 2024}
+    assert overlaps_membership(s, slot_in)
+    assert not overlaps_membership(s, slot_out)
+
+
+def test_month_list_only() -> None:
+    s = parse_schedule('May, Jul., Sep. and Nov.')
+    assert s['status'] == 'anytime'
+    assert s['calendar']['months'] == [5, 7, 9, 11]
+
+
+def test_each_weekday_with_season() -> None:
+    s = parse_schedule('Each Thu., Apr. 1 to Nov. 30, inclusive')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [4]
+    assert overlaps_membership(
+        s,
+        {'dayOfWeek': 4, 'minuteOfDay': 600, 'month': 6, 'dayOfMonth': 1, 'year': 2024},
+    )
+    assert not overlaps_membership(
+        s,
+        {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 6, 'dayOfMonth': 1, 'year': 2024},
+    )
+
+
+def test_inverted_except_weekday_mornings() -> None:
     s = parse_schedule('Anytime, except 7:00 a.m. to 9:00 a.m., Mon. to Fri.')
-    assert s['status'] == 'failed'
+    assert s['status'] == 'ok'
+    assert s['inverted'] is True
+    assert overlaps_membership(
+        s, {'dayOfWeek': 2, 'minuteOfDay': 600, 'month': 6, 'dayOfMonth': 10},
+    )
+    assert not overlaps_membership(
+        s, {'dayOfWeek': 2, 'minuteOfDay': 480, 'month': 6, 'dayOfMonth': 10},
+    )
+
+
+def test_inverted_except_sunday() -> None:
+    s = parse_schedule('Anytime, except Sun. and public holidays')
+    assert s['status'] == 'ok'
+    assert s['inverted'] is True
+    assert not overlaps_membership(
+        s, {'dayOfWeek': 0, 'minuteOfDay': 600, 'month': 6, 'dayOfMonth': 1, 'year': 2025},
+    )
+    assert overlaps_membership(
+        s, {'dayOfWeek': 1, 'minuteOfDay': 600, 'month': 6, 'dayOfMonth': 10, 'year': 2025},
+    )
+    # Christmas 2025 (Thursday): except window covers public holidays
+    assert not overlaps_membership(
+        s, {'dayOfWeek': 4, 'minuteOfDay': 600, 'month': 12, 'dayOfMonth': 25, 'year': 2025},
+    )
+
+
+def test_parenthetical_strip() -> None:
+    s = parse_schedule('Anytime (buses excepted)')
+    assert s['status'] == 'anytime'
+
+
+def test_noon_time_range() -> None:
+    s = parse_schedule('8:30 a.m. to 9:00 a.m., 9:30 a.m. to 11:00 a.m. and 12:00 noon to 5:00 p.m., Mon. to Fri.')
+    assert s['status'] == 'ok'
+    assert len(s['windows']) == 3
+
+
+def test_time_with_nov_apr_season() -> None:
+    s = parse_schedule('2:00 a.m. to 6:00 a.m., Nov. 1 to Apr. 30')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['calendar']['monthRanges']
 
 
 def test_json_roundtrip() -> None:
@@ -151,6 +244,12 @@ def test_split_day_groups() -> None:
     assert overlaps_membership(
         s, {'dayOfWeek': 0, 'minuteOfDay': 540, 'month': 3, 'dayOfMonth': 1},
     )
+
+
+def test_single_weekday_tail() -> None:
+    s = parse_schedule('9:00 a.m. to 12:00 p.m., Tue.')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [2]
 
 
 @pytest.mark.parametrize(

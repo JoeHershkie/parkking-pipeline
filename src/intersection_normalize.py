@@ -32,15 +32,20 @@ _REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r'\bsouth\b', 's'),
 )
 
-_SKIP_GT_LWN_GDNS = frozenset({r'\bgate\b', r'\blawn\b', r'\bgardens\b'})
+_SKIP_GT_LWN_GDNS = frozenset({r'\bgate\b', r'\blawn\b', r'\bgardens\b', r'\bparkway\b'})
 _SKIP_DIRECTIONS = frozenset({
     r'\bwest\b', r'\beast\b', r'\bnorth\b', r'\bsouth\b',
 })
 
-_MAX_SEARCH_TOKENS = 8
+_MAX_SEARCH_TOKENS = 12
 
 _LEG_OF_RE = re.compile(
-    r'^\s*the\s+(?:north/south|east/west|north|south|east|west)\s+leg\s+of\s+(.+)$',
+    r'^\s*the\s+(?:(?:north|south|east|west)(?:ern|erly)?\s+)?'
+    r'(?:north/south|east/west|north|south|east|west)\s+leg\s+of\s+(.+)$',
+    re.I,
+)
+_EMBEDDED_LEG_RE = re.compile(
+    r'(?:north/south|east/west|north|south|east|west)\s+leg\s+of\s+(.+?)(?:\s*$|\s+and\b)',
     re.I,
 )
 _FROM_PREFIX_RE = re.compile(r'^\s*from\s+', re.I)
@@ -149,10 +154,12 @@ def apply_street_alias(street_name: str) -> str:
     return normalize_intersection_street(street_name)
 
 
+@lru_cache(maxsize=65536)
 def tcl_search_tokens(street_name: str) -> tuple[str, ...]:
     """
     Ordered lookup tokens for substring matching in INTERSECTION_DESC.
-    Primary alias/normalized token first, then conservative TCL spelling variants.
+    Primary alias/normalized token first, then TCL street-index suffix/base remap
+    (same logic as highway graph resolution), then spelling variants.
     """
     if not street_name or not str(street_name).strip():
         return ()
@@ -168,6 +175,16 @@ def tcl_search_tokens(street_name: str) -> tuple[str, ...]:
             out.append(t)
 
     add(apply_street_alias(raw))
+    plain = normalize_intersection_street(raw)
+
+    # Suffix/base remap from tcl_street_names (e.g. bylaw Street → TCL Road).
+    from tcl_highway_resolve import intersection_resolve_tokens
+
+    for legal_token in intersection_resolve_tokens(raw):
+        add(legal_token)
+        normalized_legal = normalize_intersection_street(legal_token)
+        if normalized_legal != plain:
+            add(normalized_legal)
 
     spelled_dirs = _normalize_with_spelled_directions(raw)
     add(spelled_dirs)
@@ -175,7 +192,6 @@ def tcl_search_tokens(street_name: str) -> tuple[str, ...]:
     spelled = _normalize_with_tcl_spelling_variants(raw)
     add(spelled)
 
-    plain = normalize_intersection_street(raw)
     add(plain)
 
     bases = list(dict.fromkeys(out))
@@ -218,7 +234,11 @@ def expand_cross_lookup_names(cross: str) -> tuple[str, ...]:
     if leg:
         add(leg.group(1).strip())
 
-    if '/' in text:
+    emb = _EMBEDDED_LEG_RE.search(text)
+    if emb:
+        add(emb.group(1).strip())
+
+    if '/' in text and 'leg of' not in text.lower():
         for part in text.split('/'):
             add(part.strip())
 

@@ -55,6 +55,7 @@ _RULE_REQUIRED_STRINGS: dict[str, tuple[str, ...]] = {
     'entire_length': (),
     'block': ('start_intersection', 'end_intersection'),
     'block_to_terminus': ('start_intersection', 'terminus_direction'),
+    'terminus_end_metric': ('terminus_street', 'terminus_direction', 'direction'),
     'terminus_to_terminus': ('terminus_start_dir', 'terminus_end_dir', 'terminus_street'),
     'parenthetical_block': ('start_intersection', 'end_intersection'),
     'parenthetical_end_block': ('start_intersection', 'end_intersection'),
@@ -72,6 +73,7 @@ _RULE_REQUIRED_STRINGS: dict[str, tuple[str, ...]] = {
 _RULE_REQUIRED_FLOATS: dict[str, tuple[str, ...]] = {
     'intersect_extension': ('distance',),
     'perfect_offset': ('distance',),
+    'terminus_end_metric': ('distance',),
     'intersect_to_offset': ('distance',),
     'offset_to_intersect': ('distance',),
     'relative_extension': ('dist1', 'dist2'),
@@ -140,6 +142,9 @@ def _anchor_ok(value) -> bool:
     if _POINT_METRES_FRAGMENT_RE.match(text):
         return False
     if _starts_with_a_point(text) and 'metres' in text.lower():
+        return False
+    tl = text.lower()
+    if 'lane' in tl and ('point' in tl or 'metres' in tl):
         return False
     return True
 
@@ -322,7 +327,12 @@ def row_to_parsed(row) -> dict:
 def highway_from_row(row) -> str:
     """Highway key for TCL centreline lookup (``LINEAR_NAME_FULL_LEGAL``, lowercased).
 
-    Applies ``tcl_lookup_key`` (borough suffix, ``St.`` punctuation, suffix remap).
+    Applies ``tcl_lookup_key``, lane inference, and cross-street disambiguation.
     Does not use ``highway_norm`` — that column abbreviates types for INTERSECTION_DESC search.
     """
-    return tcl_lookup_key(str(_row_get(row, 'Highway') or ''))
+    from lane_highway_resolve import lookup_highway_key
+
+    highway = str(_row_get(row, 'Highway') or '')
+    between = str(_row_get(row, 'Between') or '')
+    parsed = row_to_parsed(row)
+    return lookup_highway_key(highway, between, parsed or None)

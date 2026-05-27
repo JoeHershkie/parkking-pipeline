@@ -51,6 +51,7 @@ def _extract_field(detail: str) -> str:
 
 
 def _load_alias_names() -> set[str]:
+    """Bylaw names suggested for alias that are not yet in street_aliases.csv."""
     path = data_path('street_alias_suggestions.csv')
     if not path.exists():
         return set()
@@ -58,7 +59,17 @@ def _load_alias_names() -> set[str]:
     if 'recommendation' not in sug.columns:
         return set()
     mask = sug['recommendation'].astype(str).str.lower() == 'alias'
-    return {str(n).strip() for n in sug.loc[mask, 'bylaw_name'] if str(n).strip()}
+    suggested = {str(n).strip() for n in sug.loc[mask, 'bylaw_name'] if str(n).strip()}
+
+    alias_path = data_path('street_aliases.csv')
+    if not alias_path.exists():
+        return suggested
+    applied = {
+        str(n).strip().lower()
+        for n in pd.read_csv(alias_path).get('bylaw_name', [])
+        if str(n).strip()
+    }
+    return {n for n in suggested if n.strip().lower() not in applied}
 
 
 def _parse_between_for_classify(row: pd.Series) -> str:
@@ -112,12 +123,21 @@ def _classify_parse_between(between: str) -> str:
     return 'other_plain'
 
 
-def _load_optional_analysis() -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+def _load_optional_analysis() -> tuple[
+    pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None,
+]:
     inter_path = data_path('intersection_failure_analysis.csv')
     geo_path = data_path('geometry_failure_analysis.csv')
+    street_path = data_path('street_failure_analysis.csv')
     inter = pd.read_csv(inter_path) if inter_path.exists() else None
-    geo = pd.read_csv(geo_path) if geo_path.exists() else None
-    return inter, geo
+    if geo_path.exists() and geo_path.stat().st_size > 0:
+        geo = pd.read_csv(geo_path)
+        if geo.empty:
+            geo = None
+    else:
+        geo = None
+    street = pd.read_csv(street_path) if street_path.exists() else None
+    return inter, geo, street
 
 
 def _inter_cols(inter: pd.DataFrame) -> pd.DataFrame:
@@ -141,6 +161,18 @@ def _geo_cols(geo: pd.DataFrame) -> pd.DataFrame:
     out = geo[cols].copy()
     out['row_id'] = out['row_id'].astype(str)
     rename = {c: f'geo_{c}' if c != 'row_id' else c for c in cols if c != 'row_id'}
+    return out.rename(columns=rename)
+
+
+def _street_cols(street: pd.DataFrame) -> pd.DataFrame:
+    keep = [
+        'row_id', 'street_category', 'subcause', 'suggested_fix', 'suggested_tier',
+        'resolved_key_candidate', 'near_match_count', 'anchor_street',
+    ]
+    cols = [c for c in keep if c in street.columns]
+    out = street[cols].copy()
+    out['row_id'] = out['row_id'].astype(str)
+    rename = {c: f'street_{c}' if c != 'row_id' else c for c in cols if c != 'row_id'}
     return out.rename(columns=rename)
 
 
@@ -318,6 +350,32 @@ def assign_fix_tier(row: pd.Series, alias_names: set[str]) -> tuple[str, str, st
         )
 
     if reason == 'STREET_NOT_FOUND':
+        street_fix = str(row.get('street_suggested_fix') or row.get('suggested_fix') or '')
+        street_cat = str(
+            row.get('street_street_category') or row.get('street_category') or '',
+        )
+        resolved = str(
+            row.get('street_resolved_key_candidate') or row.get('resolved_key_candidate') or '',
+        )
+        if street_cat == 'truly_absent_from_tcl':
+            return (
+                'D_hard',
+                'street_not_in_tcl',
+                'No TCL centreline; research rename or private street',
+            )
+        if street_fix == 'auto_highway_resolve':
+            hint = f'Apply highway resolve → {resolved}' if resolved else 'Extend tcl_highway_resolve'
+            return ('B_quick', 'street_resolve:auto', hint)
+        if street_fix == 'lane_infer':
+            anchor = str(row.get('street_anchor_street') or row.get('anchor_street') or '')
+            hint = f'Lane/laneway inference near {anchor!r}' if anchor else 'Lane/laneway highway inference'
+            return ('C_medium', 'street_resolve:lane', hint)
+        if street_fix == 'manual_alias':
+            return (
+                'C_medium',
+                'street_alias:needed',
+                'Add verified entry to data/highway_aliases.csv',
+            )
         return (
             'D_hard',
             'street_not_found',
@@ -349,6 +407,7 @@ def build_triage(
     ledger: pd.DataFrame,
     inter: pd.DataFrame | None,
     geo: pd.DataFrame | None,
+    street: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     df = ledger.copy()
     df = df[~df['reason_code'].isin(LEDGER_EXCLUDED_REASON_CODES)].copy()
@@ -364,6 +423,9 @@ def build_triage(
 
     if geo is not None:
         df = df.merge(_geo_cols(geo), on='row_id', how='left')
+
+    if street is not None:
+        df = df.merge(_street_cols(street), on='row_id', how='left')
 
     parse_mask = df['reason_code'].isin(('PARSE_NO_MATCH', 'PARSE_INVALID'))
     df['parse_between_class'] = ''
@@ -388,6 +450,8 @@ def build_triage(
         'inter_field', 'inter_cross', 'inter_category', 'inter_attribution_final',
         'inter_subcause',
         'geo_cause_category', 'geo_attribution', 'geo_fix_hint',
+        'street_street_category', 'street_subcause', 'street_suggested_fix',
+        'street_resolved_key_candidate', 'street_anchor_street',
     ]
     for c in cols:
         if c not in df.columns:
@@ -438,7 +502,7 @@ def main() -> None:
         raise SystemExit(f'Missing {ledger_path}; run pipeline stages first.')
 
     ledger = pd.read_csv(ledger_path)
-    inter, geo = (None, None) if args.no_analysis_join else _load_optional_analysis()
+    inter, geo, street = (None, None, None) if args.no_analysis_join else _load_optional_analysis()
 
     if inter is not None:
         print(f'Joined intersection_failure_analysis ({len(inter)} rows)')
@@ -448,8 +512,12 @@ def main() -> None:
         print(f'Joined geometry_failure_analysis ({len(geo)} rows)')
     else:
         print('No geometry_failure_analysis.csv; geometry tiers use reason_code only')
+    if street is not None:
+        print(f'Joined street_failure_analysis ({len(street)} rows)')
+    else:
+        print('No street_failure_analysis.csv; STREET_NOT_FOUND uses default tier')
 
-    triage = build_triage(ledger, inter, geo)
+    triage = build_triage(ledger, inter, geo, street)
     out = data_path('failure_triage.csv')
     triage.to_csv(out, index=False)
     print(f'\nWrote {out}')

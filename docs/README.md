@@ -125,7 +125,29 @@ Produced by [`src/parse_schedule.py`](../src/parse_schedule.py) from `Prohibited
 | `schedule_status` | `anytime`, `ok`, `partial`, or `failed`. |
 | `max_minutes` | Max stay in minutes when parseable; else empty. |
 
-**Membership filter (webapp):** `overlaps_membership(schedule, { dayOfWeek, minuteOfDay, month, dayOfMonth })` in `schedule_format.py`. Days use `0=Sun … 6=Sat`. `failed` rows return `False` from the helper (include-unknown is a frontend policy). Seasonal/monthly calendar phrases (phases D/E) currently yield `failed`; analyze gaps with [`scripts/analyze_schedule_failures.py`](../scripts/analyze_schedule_failures.py).
+**Membership filter (webapp):** `overlaps_membership(schedule, slot)` in [`src/schedule_format.py`](../src/schedule_format.py).
+
+| Slot field | Required | Notes |
+|------------|----------|--------|
+| `dayOfWeek` | yes | `0=Sun` … `6=Sat` (`Date.getDay()`) |
+| `minuteOfDay` | yes | `0–1439` |
+| `month` | yes | `1–12` |
+| `dayOfMonth` | yes | `1–31` |
+| `year` | recommended | Needed when `calendar.dayOfMonthRanges` uses `end: "last"` |
+
+**Schedule JSON (additive on `v: 1`):**
+
+- `calendar` (optional): `monthRanges` (seasonal, including year-wrap e.g. Dec–Mar), `dayOfMonthRanges` (`start` / `end` or `end: "last"`), `months` (month-list-only rules).
+- `inverted` (optional): `windows` describe **except** periods; prohibition is active when calendar matches and no except-window matches.
+- Per-window `calendar` overrides schedule-level `calendar` for that window.
+
+`failed` rows return `False` from `overlaps_membership` (include-unknown is a frontend policy). `partial` uses OR over parsed windows only.
+
+**Public holidays:** `flags.exceptPublicHolidays` uses Ontario statutory holidays via the [`holidays`](https://github.com/vacanza/python-holidays) package ([`src/public_holidays.py`](../src/public_holidays.py), observed dates). Pass `year` in the slot. Normal schedules skip holiday slots; inverted schedules treat holidays as except periods when flagged.
+
+One-off absolute dates (`June 6, 2022`, etc.) may still be `failed` or `partial`.
+
+Analyze remaining gaps: [`scripts/analyze_schedule_failures.py`](../scripts/analyze_schedule_failures.py).
 
 ### Joining back to raw
 
@@ -221,7 +243,7 @@ Distances along centreline: EPSG:4326 ↔ EPSG:32617; offset rules use **along-l
 | `AMBIGUOUS_INTERSECTION` | Multiple ID pairs tie on shortest path, or parenthetical qualifier cannot disambiguate |
 | `UNSUPPORTED_RULE_TYPE` | Unknown `rule_type` |
 | `GEOMETRY_ERROR` | Projection/slicing exception or empty geometry (non-zero-span failures) |
-| `ZERO_SPAN` | Parsed rule has no mappable curb segment (e.g. anchor already at terminus); excluded from map GeoJSON — expected skip, not a bug |
+| `ZERO_SPAN` | Parsed rule has no mappable curb segment (e.g. anchor already at terminus); excluded from map GeoJSON — expected skip, not a bug. `block_to_terminus` uses **geographic** east/west on the graph component (not polyline parameter 0/length); cul-de-sac fallback walks to the farthest node when compass span collapses. |
 
 Pipeline stages append failures to `data/failure_ledger.csv` via `failure_ledger.record_failure` (columns: `row_id`, `stage`, `reason_code`, `detail`, `highway`, `between`, `between_parsed_input`). Source `between` is always the clean CSV text; `between_parsed_input` is set for parse-stage failures to the string passed to regex after `preprocess_between` (empty for other stages).
 
@@ -250,13 +272,24 @@ Changes: shared normalizer (fixes Weston/`St.`/Parkway/Gate/Lawn), new regex typ
 
 ### Failure triage (`failure_ledger.csv` → `failure_triage.csv`)
 
-Assign a `fix_tier` per ledger row (`A_intentional`, `A_trivial`, `B_quick`, `C_medium`, `D_hard`) for prioritization. Joins optional `intersection_failure_analysis.csv` and `geometry_failure_analysis.csv` when present.
+Assign a `fix_tier` per ledger row (`A_intentional`, `A_skipped`, `A_trivial`, `B_quick`, `C_medium`, `D_hard`) for prioritization. Joins optional `intersection_failure_analysis.csv`, `geometry_failure_analysis.csv`, and `street_failure_analysis.csv` when present.
 
 ```bash
+.venv/bin/python src/fullrun.py
+# or, after a geo run:
+.venv/bin/python scripts/analyze_intersection_failures.py
+.venv/bin/python scripts/analyze_geometry_failures.py
+.venv/bin/python scripts/analyze_street_failures.py
 .venv/bin/python scripts/triage_failure_ledger.py
 ```
 
-Writes `data/failure_triage.csv` and `data/failure_triage_summary.json`. Re-run `analyze_intersection_failures.py` / `analyze_geometry_failures.py` first for richer geo/intersection columns.
+`src/fullrun.py` runs clean → parse → schedule → geometry → street analyzer → triage.
+
+**Highway → TCL resolution** ([`src/tcl_highway_resolve.py`](../src/tcl_highway_resolve.py), [`src/lane_highway_resolve.py`](../src/lane_highway_resolve.py)): strips parentheticals/descriptors, unique base/suffix remap, Mc/hyphen spacing, gated edit-distance-1, cross-street disambiguation, and lane/laneway inference. The same base/suffix remap is also fed into [`tcl_search_tokens`](../src/intersection_normalize.py) (cross streets from Between, not only the Highway column). One-off verified renames go in [`data/highway_aliases.csv`](../data/highway_aliases.csv) (see `scripts/suggest_highway_aliases.py`).
+
+Writes `data/failure_triage.csv` and `data/failure_triage_summary.json`.
+
+**After ABC-tier remediation (May 2026):** ~22,638 parsed rows → **19,691+** map features (re-run geo after offset fix for latest count); `PARSE_NO_MATCH` **492** (was ~634); `GEOMETRY_ERROR` **0**. Offset rules use **graph component** centreline, inbound metric when offsets clamp at terminus, multi-node span for duplicate cross names, and graph-path fallback when projections collapse — former **~662** `ZERO_SPAN` rows should drop to **~0–2** on re-run (remainder typically `STREET_NOT_FOUND`).
 
 ### Intersection failure analysis (`INTERSECTION_NOT_FOUND`)
 
@@ -272,6 +305,16 @@ Writes:
 - `data/intersection_failure_summary.json` — aggregate counts and top `(highway, cross)` pairs
 
 Uses production matching via `tcl_graph.resolve_intersection_ids` (same as `geometry_engine.py`).
+
+### Street failure analysis (`STREET_NOT_FOUND`)
+
+```bash
+.venv/bin/python scripts/analyze_street_failures.py
+.venv/bin/python scripts/suggest_highway_aliases.py
+.venv/bin/python scripts/audit_highway_resolution.py
+```
+
+Writes `data/street_failure_analysis.csv` and `data/street_failure_summary.json` with `street_category`, `subcause`, `suggested_fix`, and `resolved_key_candidate` per ledger row. Triage uses these columns to split `STREET_NOT_FOUND` into `street_resolve:auto`, `street_resolve:lane`, `street_alias:needed`, and `street_not_in_tcl`.
 
 Typical breakdown (full parsed run, **3,284** failures / 21,783 parsed):
 

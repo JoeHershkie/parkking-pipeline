@@ -510,9 +510,22 @@ def main() -> None:
     print(f'detail values: {merged["detail"].value_counts().to_dict()}')
 
     print('\n=== DIAGNOSING ROWS ===')
-    records = [diagnose_row(row) for _, row in merged.iterrows()]
-    df = pd.DataFrame(records)
-    df = df.loc[:, ~df.columns.duplicated()]
+    if merged.empty:
+        df = pd.DataFrame()
+        print('No GEOMETRY_ERROR rows to diagnose.')
+    else:
+        records = [diagnose_row(row) for _, row in merged.iterrows()]
+        df = pd.DataFrame(records)
+        df = df.loc[:, ~df.columns.duplicated()]
+
+    if df.empty:
+        out = ROOT / 'data' / 'geometry_failure_analysis.csv'
+        pd.DataFrame(columns=[
+            'row_id', 'cause_category', 'attribution', 'fix_hint', 'rule_type',
+            'delta_m', 'between_category',
+        ]).to_csv(out, index=False)
+        print(f'\nWrote empty {out}')
+        return
 
     # Sanity check
     bad_delta = df[df['delta_m'].notna() & (df['delta_m'] >= COLLAPSE_TOL_M)]

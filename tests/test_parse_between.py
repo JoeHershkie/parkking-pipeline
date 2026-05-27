@@ -251,7 +251,10 @@ def test_parse_metric_anchor_upgrades(between: str, rule_type: str, checks: dict
     ('raw', 'expected_fragment'),
     [
         ('Bathurst Street and a point 91.5 metres west Bathurst Street', 'west of Bathurst'),
-        ('A point 342 metres south and Sheppard Avenue East', 'south and east of Sheppard'),
+        (
+            'A point 342 metres south and Sheppard Avenue East',
+            'metres south and Sheppard Avenue East',
+        ),
         ('Greenwin Village Road and a point 321 metres south/west of Bison Drive', 'south and west of'),
         ('A point ppposite the southerly limit', 'opposite the southerly limit'),
     ],
@@ -292,6 +295,39 @@ def test_preprocess_between_point_and_street_fixes(raw: str, expected_fragment: 
 def test_parse_point_and_street_patterns(between: str, rule_type: str) -> None:
     parsed = parse_between(between)
     assert parsed is not None
+    assert parsed['rule_type'] == rule_type
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+@pytest.mark.parametrize(
+    ('between', 'rule_type'),
+    [
+        (
+            'Yonge Street and a point opposite the easterly limit of Botham Road',
+            'block',
+        ),
+        (
+            'The south end of Flint Road and a point 40 metres north',
+            'terminus_end_metric',
+        ),
+        (
+            'A point 342 metres south and Sheppard Avenue East',
+            'perfect_offset',
+        ),
+        (
+            'Emily Avenue and 100 metres west',
+            'perfect_offset',
+        ),
+        (
+            'Royal York Road and and a point 103.5 metres east of Royal York Road',
+            'intersect_to_offset',
+        ),
+    ],
+)
+def test_parse_abc_wave_patterns(between: str, rule_type: str) -> None:
+    parsed = parse_between(between)
+    assert parsed is not None, between
     assert parsed['rule_type'] == rule_type
     ok, err = validate_parsed(parsed)
     assert ok, err

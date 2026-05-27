@@ -16,18 +16,25 @@ from intersection_normalize import (
 
 _ids: list[int] = []
 _descs: list[str] = []
+_desc_by_id: dict[int, str] = {}
 _id_order: dict[int, int] = {}
 _postings: dict[str, tuple[int, ...]] = {}
 
 
 def configure(ix_gdf: gpd.GeoDataFrame) -> None:
     """Load parallel id/desc arrays and clear token postings."""
-    global _ids, _descs, _id_order, _postings
+    global _ids, _descs, _desc_by_id, _id_order, _postings
     _ids = [int(x) for x in ix_gdf['INTERSECTION_ID'].tolist()]
     _descs = ix_gdf['INTERSECTION_DESC'].str.lower().tolist()
+    _desc_by_id = {
+        int(ix_id): desc
+        for ix_id, desc in zip(_ids, _descs, strict=True)
+    }
     _id_order = {ix_id: i for i, ix_id in enumerate(_ids)}
     _postings = {}
     resolve_pair_ids.cache_clear()
+    resolve_pair_ids_tokens.cache_clear()
+    _clear_pair_root_cache()
 
 
 def postings_snapshot() -> dict[str, tuple[int, ...]]:
@@ -39,6 +46,22 @@ def install_postings(postings: dict[str, tuple[int, ...]]) -> None:
     global _postings
     _postings = dict(postings)
     resolve_pair_ids.cache_clear()
+    resolve_pair_ids_tokens.cache_clear()
+    _clear_pair_root_cache()
+
+
+def intersection_desc(intersection_id: int) -> str:
+    """Lowercased ``INTERSECTION_DESC`` for an id (empty if unknown)."""
+    return _desc_by_id.get(int(intersection_id), '')
+
+
+def _clear_pair_root_cache() -> None:
+    try:
+        from intersection_pair_resolve import clear_pair_root_cache
+
+        clear_pair_root_cache()
+    except ImportError:
+        pass
 
 
 def _ensure_token(token: str) -> tuple[int, ...]:
@@ -80,12 +103,19 @@ def warm_tokens(tokens: Iterable[str]) -> int:
 
 def collect_tokens_from_pairs(pairs: Iterable[tuple[str, str]]) -> set[str]:
     """Normalized search tokens for a set of (street_a, street_b) lookups."""
-    tokens: set[str] = set()
+    names: set[str] = set()
     for a, b in pairs:
         for name in expand_cross_lookup_names(a) if a else ():
-            tokens.update(tcl_search_tokens(name))
+            key = name.strip()
+            if key:
+                names.add(key)
         for name in expand_cross_lookup_names(b) if b else ():
-            tokens.update(tcl_search_tokens(name))
+            key = name.strip()
+            if key:
+                names.add(key)
+    tokens: set[str] = set()
+    for name in names:
+        tokens.update(tcl_search_tokens(name))
     return tokens
 
 
@@ -119,8 +149,8 @@ def _resolve_with_tokens(tokens_1: tuple[str, ...], tokens_2: tuple[str, ...]) -
 
 
 @lru_cache(maxsize=65536)
-def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
-    """INTERSECTION_IDs whose description contains both normalized street tokens."""
+def resolve_pair_ids_tokens(street_1: str, street_2: str) -> tuple[int, ...]:
+    """INTERSECTION_IDs matched by normalized tokens only (no root fallback)."""
     if not street_1 or not street_2:
         return ()
 
@@ -135,6 +165,23 @@ def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
             hit = _resolve_with_tokens(tokens_1, tokens_2)
             if hit:
                 return hit
+    return ()
+
+
+@lru_cache(maxsize=65536)
+def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
+    """INTERSECTION_IDs whose description contains both normalized street tokens."""
+    hit = resolve_pair_ids_tokens(street_1, street_2)
+    if hit:
+        return hit
+
+    from intersection_pair_resolve import resolve_pair_via_roots
+
+    for name_1 in _lookup_name_candidates(street_1):
+        for name_2 in _lookup_name_candidates(street_2):
+            root_match = resolve_pair_via_roots(name_1, name_2)
+            if root_match is not None:
+                return (root_match.intersection_id,)
     return ()
 
 

@@ -3,6 +3,9 @@
 import sys
 from pathlib import Path
 
+import geopandas as gpd
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
@@ -61,6 +64,28 @@ def test_tcl_search_tokens_includes_gate_spelling_variant():
     assert 'york gate blvd' in tokens
 
 
+def test_tcl_search_tokens_includes_gardens_spelling_variant():
+    tokens = tcl_search_tokens('Locust Lodge Gardens')
+    assert 'locust lodge gdns' in tokens
+    assert 'locust lodge gardens' in tokens
+
+
+def test_tcl_search_tokens_includes_parkway_spelling_variant():
+    tokens = tcl_search_tokens('Murray Ross Parkway')
+    assert 'murray ross pkwy' in tokens
+    assert 'murray ross parkway' in tokens
+
+
+def test_expand_cross_lookup_skips_leg_slash_compound():
+    leg = expand_cross_lookup_names('Pape Avenue/Donlands Avenue')
+    assert 'Pape Avenue' in leg
+    assert 'Donlands Avenue' in leg
+    embedded = expand_cross_lookup_names(
+        'Public lane first west of the north/south leg of Rankin Crescent',
+    )
+    assert 'Rankin Crescent' in embedded
+
+
 def test_tcl_search_tokens_apostrophe_variant():
     tokens = tcl_search_tokens("St. Anne's Road")
     assert "st anne's rd" in tokens or 'st annes rd' in tokens
@@ -110,6 +135,31 @@ def test_tcl_search_tokens_st_clair_west_alias():
     tokens = tcl_search_tokens('St. Clair West')
     assert 'st clair ave w' in tokens
     assert 'st clair w' in tokens
+
+
+@pytest.fixture(scope='module')
+def tcl_street_index():
+    import tcl_highway_resolve as thr
+    from paths import data_path
+
+    st = gpd.read_file(data_path('tcl_streets.geojson'))
+    legal = set(st['LINEAR_NAME_FULL_LEGAL'].str.lower())
+    thr.build_index_from_csv(legal_keys=legal)
+    return thr
+
+
+def test_tcl_search_tokens_suffix_remap_from_street_index(tcl_street_index):
+    del tcl_street_index
+    tokens = tcl_search_tokens('Kelso Street')
+    assert 'kelso st' in tokens
+    assert 'kelso avenue' in tokens
+    assert 'kelso ave' in tokens
+
+
+def test_tcl_search_tokens_typo_via_resolve(tcl_street_index):
+    del tcl_street_index
+    tokens = tcl_search_tokens('Younge Street')
+    assert 'yonge street' in tokens
 
 
 if __name__ == '__main__':

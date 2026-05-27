@@ -5,42 +5,67 @@ Frontend contract (implemented here for tests and documentation):
     overlaps_membership(schedule, slot) -> bool
 
 *slot* uses ``dayOfWeek`` 0=Sun … 6=Sat (``Date.getDay()``), ``minuteOfDay`` 0–1439,
-``month`` 1–12, ``dayOfMonth`` 1–31.
+``month`` 1–12, ``dayOfMonth`` 1–31, and optionally ``year`` (needed for ``end: "last"``
+day-of-month ranges).
 
 * ``status == 'anytime'``: matches time/day filters; calendar predicates still apply.
 * ``status == 'failed'``: returns ``False`` (webapp may choose to include unknown rows).
 * ``status == 'partial'``: OR over parsed ``windows`` only.
-* ``flags.exceptPublicHolidays``: metadata only in v1 (no holiday calendar).
+* ``inverted``: ``windows`` are EXCEPT periods; prohibition active when calendar ok and
+  no except-window matches.
+* ``flags.exceptPublicHolidays``: on a matching window, Ontario public holidays do not
+  count as in-window (prohibition not active). Inverted schedules: holidays count as
+  except periods when the flag is set. Requires ``year`` in *slot* (see ``public_holidays``).
 """
 
 from __future__ import annotations
 
+import calendar as cal_mod
 import json
 import re
 from typing import Any
 
 import pandas as pd
 
+from public_holidays import is_public_holiday
+
 SCHEDULE_VERSION = 1
 
-# Detect calendar phrases we do not fully parse yet (phases D/E).
-_CALENDAR_MARKER_RE = re.compile(
-    r'\b(?:'
-    r'Jan\.|Feb\.|Mar\.|Apr\.|May\.|Jun\.|Jul\.|Aug\.|Sep\.|Sept\.|Oct\.|Nov\.|Dec\.'
-    r'|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+\d'
-    r'|day of each month'
-    r'|one year to'
-    r'|following year'
-    r')\b',
-    re.IGNORECASE,
-)
+_MONTH_ABBR: dict[str, int] = {
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'sept': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12,
+}
+
+_WEEKDAY_ABBR: dict[str, int] = {
+    'sun': 0,
+    'mon': 1,
+    'tue': 2,
+    'tues': 2,
+    'wed': 3,
+    'thu': 4,
+    'thur': 4,
+    'thurs': 4,
+    'fri': 5,
+    'sat': 6,
+}
 
 _INVERTED_MARKER_RE = re.compile(
     r'\bAnytime\s*,\s*except\b',
     re.IGNORECASE,
 )
 
-_MERIDIEM = r'a\.m\.?|p\.m\.?'
+_MERIDIEM = r'a\.m\.?|p\.m\.?|noon|midnight'
 
 _TIME_RE = re.compile(
     rf'(\d{{1,2}}):(\d{{2}})\s*({_MERIDIEM})',
@@ -56,6 +81,80 @@ _SIMPLE_RANGE_RE = re.compile(
 _OVERNIGHT_RANGE_RE = re.compile(
     rf'(\d{{1,2}}):(\d{{2}})\s*({_MERIDIEM})\s+of one day\s+to\s+'
     rf'(\d{{1,2}}):(\d{{2}})\s*({_MERIDIEM})\s+of the next(?:\s+following)?\s+day',
+    re.IGNORECASE,
+)
+
+# Calendar tails (stripped from end of clause, may repeat)
+_SEASONAL_YEAR_SPAN_RE = re.compile(
+    r',?\s*(?:from\s+)?([A-Za-z]+)\.?\s+(\d{1,2})\s+of one year to\s+'
+    r'([A-Za-z]+)\.?\s+(\d{1,2})\s+of the next following year,?\s*(?:inclusive)?\.?\s*$',
+    re.IGNORECASE,
+)
+_SEASONAL_NO_INCLUSIVE_RE = re.compile(
+    r',?\s*([A-Za-z]+)\.?\s+(\d{1,2})\s+to\s+([A-Za-z]+)\.?\s+(\d{1,2})\.?\s*$',
+    re.IGNORECASE,
+)
+_SEASONAL_FROM_RE = re.compile(
+    r',?\s*from\s+([A-Za-z]+)\.?\s+(\d{1,2})\s+to\s+'
+    r'([A-Za-z]+)\.?\s+(\d{1,2}),?\s*inclusive\.?\s*$',
+    re.IGNORECASE,
+)
+_SEASONAL_PLAIN_RE = re.compile(
+    r',?\s*([A-Za-z]+)\.?\s+(\d{1,2})\s+to\s+'
+    r'([A-Za-z]+)\.?\s+(\d{1,2}),?\s*inclusive\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_FROM_THE_RE = re.compile(
+    r'(?:,\s*|\s+)from the (\d{1,2})(?:st|nd|rd|th)? day of each month to the '
+    r'(\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_FROM_THE_SHORT_ORD_RE = re.compile(
+    r'(?:,\s*|\s+)from the (\d{1,2})(?:st|nd|rd|th)? day to the '
+    r'(\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_FROM_THE_LAST_RE = re.compile(
+    r'(?:,\s*|\s+)from the (\d{1,2})(?:st|nd|rd|th)? day of each month to the '
+    r'last day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_FROM_THE_SHORT_LAST_RE = re.compile(
+    r'(?:,\s*|\s+)from the (\d{1,2})(?:st|nd|rd|th)? day to the '
+    r'last day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_LEADING_ORD_LAST_RE = re.compile(
+    r'^(\d{1,2})(?:st|nd|rd|th)? day to the last day of each month',
+    re.IGNORECASE,
+)
+_DOM_LEADING_ORD_ORD_RE = re.compile(
+    r'^(?:from the )?(\d{1,2})(?:st|nd|rd|th)? day to the '
+    r'(\d{1,2})(?:st|nd|rd|th)? day of each month',
+    re.IGNORECASE,
+)
+_DOM_LEADING_FIRST_RE = re.compile(
+    r'^first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month',
+    re.IGNORECASE,
+)
+_DOM_FIRST_LAST_WORD_RE = re.compile(
+    r',?\s*(?:from the )?first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_ORD_TO_ORD_RE = re.compile(
+    r',?\s*(\d{1,2})(?:st|nd|rd|th)? day to the (\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_DOM_ORD_TO_LAST_RE = re.compile(
+    r',?\s*(\d{1,2})(?:st|nd|rd|th)? day to the last day of each month\.?\s*$',
+    re.IGNORECASE,
+)
+_MONTH_LIST_RE = re.compile(
+    r'^((?:[A-Za-z]+\.?(?:\s*,\s*|\s+))+(?:and\s+)?[A-Za-z]+\.?)\s*$',
+    re.IGNORECASE,
+)
+_EACH_WEEKDAY_RE = re.compile(
+    r'^Each\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?\s*,?\s*(.*)$',
     re.IGNORECASE,
 )
 
@@ -135,6 +234,19 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
         {},
     ),
     (
+        re.compile(
+            r'\s+Sat\.?,?\s+Sun\.?(?:\s+and\s+public\s+holidays)?\.?\s*$',
+            re.IGNORECASE,
+        ),
+        [0, 6],
+        {'exceptPublicHolidays': True},
+    ),
+    (
+        re.compile(r'\s+Sat\.?\s+and\s+Sun\.?\s*$', re.IGNORECASE),
+        [0, 6],
+        {},
+    ),
+    (
         re.compile(r'^Mon\.?\s+to\s+Fri\.?\s*$', re.IGNORECASE),
         [1, 2, 3, 4, 5],
         {},
@@ -142,6 +254,16 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
     (
         re.compile(r'^Mon\.?\s+to\s+Sat\.?\s*$', re.IGNORECASE),
         [1, 2, 3, 4, 5, 6],
+        {},
+    ),
+    (
+        re.compile(r'^Sun\.?\s+and\s+public\s+holidays\.?\s*$', re.IGNORECASE),
+        [0],
+        {'exceptPublicHolidays': True},
+    ),
+    (
+        re.compile(r'^Sun\.?\s*$', re.IGNORECASE),
+        [0],
         {},
     ),
 )
@@ -158,9 +280,290 @@ def _is_blank(val: Any) -> bool:
     return not str(val).strip()
 
 
+def _normalize_source(text: str) -> str:
+    text = re.sub(r'\s*\([^)]*\)\s*', ' ', text)
+    text = re.sub(r'\banytime\.', 'Anytime,', text, flags=re.IGNORECASE)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _parse_month_abbr(token: str) -> int | None:
+    key = token.strip().rstrip('.').lower()
+    return _MONTH_ABBR.get(key)
+
+
+def _month_day_key(month: int, day: int) -> int:
+    return month * 32 + day
+
+
+def _in_month_range(
+    month: int,
+    day: int,
+    start_month: int,
+    start_day: int,
+    end_month: int,
+    end_day: int,
+) -> bool:
+    pos = _month_day_key(month, day)
+    start = _month_day_key(start_month, start_day)
+    end = _month_day_key(end_month, end_day)
+    if start <= end:
+        return start <= pos <= end
+    return pos >= start or pos <= end
+
+
+def _last_day_for_slot(slot: dict[str, int]) -> int:
+    year = slot.get('year')
+    month = slot['month']
+    if year is not None:
+        return cal_mod.monthrange(int(year), month)[1]
+    return 31
+
+
+def _merge_calendar(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = dict(base)
+    for key in ('monthRanges', 'dayOfMonthRanges', 'months'):
+        if key not in extra:
+            continue
+        if key not in out:
+            out[key] = list(extra[key]) if key != 'months' else list(extra[key])
+            continue
+        if key == 'months':
+            out['months'] = sorted(set(out['months']) | set(extra['months']))
+        else:
+            out[key] = list(out[key]) + list(extra[key])
+    return out
+
+
+def _append_month_range(
+    cal: dict[str, Any],
+    sm: int,
+    sd: int,
+    em: int,
+    ed: int,
+) -> None:
+    cal.setdefault('monthRanges', []).append({
+        'startMonth': sm,
+        'startDay': sd,
+        'endMonth': em,
+        'endDay': ed,
+    })
+
+
+def _append_dom_range(cal: dict[str, Any], start: int, end: int | str) -> None:
+    cal.setdefault('dayOfMonthRanges', []).append({'start': start, 'end': end})
+
+
+def _parse_month_list(text: str) -> list[int] | None:
+    m = _MONTH_LIST_RE.match(text.strip())
+    if not m:
+        return None
+    body = m.group(1)
+    parts = re.split(r'\s*,\s*|\s+and\s+', body, flags=re.IGNORECASE)
+    months: list[int] = []
+    for part in parts:
+        part = part.strip().strip(',')
+        if not part:
+            continue
+        mo = _parse_month_abbr(part)
+        if mo is None:
+            return None
+        months.append(mo)
+    return sorted(set(months)) if months else None
+
+
+_SEASONAL_LEADING_FROM_RE = re.compile(
+    r'^,?\s*(?:from\s+)?([A-Za-z]+)\.?\s+(\d{1,2})\s+to\s+'
+    r'([A-Za-z]+)\.?\s+(\d{1,2}),?\s*(?:inclusive)?\.?\s*$',
+    re.IGNORECASE,
+)
+
+
+def _extract_calendar_leading(text: str) -> tuple[str, dict[str, Any] | None]:
+    """Strip day-of-month phrases at the start (before time or Anytime)."""
+    remainder = text.strip()
+    cal: dict[str, Any] = {}
+    m = re.match(
+        r'^from the (\d{1,2})(?:st|nd|rd|th)? day of each month to the '
+        r'last day of each month',
+        remainder,
+        re.IGNORECASE,
+    )
+    if m:
+        _append_dom_range(cal, int(m.group(1)), 'last')
+        remainder = remainder[m.end() :].strip().lstrip(',').strip()
+    m = re.match(
+        r'^from the (\d{1,2})(?:st|nd|rd|th)? day to the last day of each month',
+        remainder,
+        re.IGNORECASE,
+    )
+    if m:
+        _append_dom_range(cal, int(m.group(1)), 'last')
+        remainder = remainder[m.end() :].strip().lstrip(',').strip()
+    m = re.match(
+        r'^from the (\d{1,2})(?:st|nd|rd|th)? day of each month to the '
+        r'(\d{1,2})(?:st|nd|rd|th)? day of each month',
+        remainder,
+        re.IGNORECASE,
+    )
+    if m:
+        _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+        remainder = remainder[m.end() :].strip().lstrip(',').strip()
+    m = re.match(
+        r'^from the (\d{1,2})(?:st|nd|rd|th)? day to the '
+        r'(\d{1,2})(?:st|nd|rd|th)? day of each month',
+        remainder,
+        re.IGNORECASE,
+    )
+    if m:
+        _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+        remainder = remainder[m.end() :].strip().lstrip(',').strip()
+    m = _DOM_LEADING_ORD_LAST_RE.match(remainder)
+    if m:
+        _append_dom_range(cal, int(m.group(1)), 'last')
+        return remainder[m.end() :].strip().lstrip(',').strip(), cal
+    m = _DOM_LEADING_FIRST_RE.match(remainder)
+    if m:
+        _append_dom_range(cal, 1, int(m.group(1)))
+        return remainder[m.end() :].strip().lstrip(',').strip(), cal
+    m = _DOM_LEADING_ORD_ORD_RE.match(remainder)
+    if m:
+        _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+        remainder = remainder[m.end() :].strip().lstrip(',').strip()
+    m = _SEASONAL_LEADING_FROM_RE.match(remainder)
+    if m:
+        sm = _parse_month_abbr(m.group(1))
+        em = _parse_month_abbr(m.group(3))
+        if sm and em:
+            _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+            remainder = remainder[m.end() :].strip()
+    return remainder, cal if cal else None
+
+
+def _extract_calendar_tail(text: str) -> tuple[str, dict[str, Any] | None]:
+    """Strip recognized calendar phrases from the end of a clause; merge into one calendar dict."""
+    remainder, lead_cal = _extract_calendar_leading(text.strip())
+    cal: dict[str, Any] = dict(lead_cal) if lead_cal else {}
+    changed = True
+    while changed and remainder:
+        changed = False
+        m = _SEASONAL_YEAR_SPAN_RE.search(remainder)
+        if m:
+            sm = _parse_month_abbr(m.group(1))
+            em = _parse_month_abbr(m.group(3))
+            if sm and em:
+                _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+                remainder = remainder[: m.start()].strip()
+                changed = True
+                continue
+        m = _SEASONAL_NO_INCLUSIVE_RE.search(remainder)
+        if m:
+            sm = _parse_month_abbr(m.group(1))
+            em = _parse_month_abbr(m.group(3))
+            if sm and em:
+                _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+                remainder = remainder[: m.start()].strip()
+                changed = True
+                continue
+        m = _SEASONAL_FROM_RE.search(remainder)
+        if m:
+            sm = _parse_month_abbr(m.group(1))
+            em = _parse_month_abbr(m.group(3))
+            if sm and em:
+                _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+                remainder = remainder[: m.start()].strip()
+                changed = True
+                continue
+        m = _SEASONAL_PLAIN_RE.search(remainder)
+        if m:
+            sm = _parse_month_abbr(m.group(1))
+            em = _parse_month_abbr(m.group(3))
+            if sm and em:
+                _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+                remainder = remainder[: m.start()].strip()
+                changed = True
+                continue
+        m = _DOM_FROM_THE_LAST_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, int(m.group(1)), 'last')
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_FROM_THE_SHORT_LAST_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, int(m.group(1)), 'last')
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_FROM_THE_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_FROM_THE_SHORT_ORD_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_FIRST_LAST_WORD_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, 1, int(m.group(1)))
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_ORD_TO_ORD_RE.search(remainder)
+        if m:
+            _append_dom_range(cal, int(m.group(1)), int(m.group(2)))
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+        m = _DOM_ORD_TO_LAST_RE.search(remainder)
+        if m and not remainder[: m.start()].rstrip().lower().endswith('from the'):
+            _append_dom_range(cal, int(m.group(1)), 'last')
+            remainder = remainder[: m.start()].strip()
+            changed = True
+            continue
+    return remainder, cal if cal else None
+
+
+def _slot_in_calendar(slot: dict[str, int], calendar: dict[str, Any] | None) -> bool:
+    if not calendar:
+        return True
+    month = slot['month']
+    day = slot['dayOfMonth']
+    months_only = calendar.get('months')
+    if months_only is not None and month not in months_only:
+        return False
+    for dom in calendar.get('dayOfMonthRanges', []):
+        start = int(dom['start'])
+        end = dom['end']
+        if end == 'last':
+            last = _last_day_for_slot(slot)
+            if not (start <= day <= last):
+                return False
+        elif not (start <= day <= int(end)):
+            return False
+    for mr in calendar.get('monthRanges', []):
+        if not _in_month_range(
+            month,
+            day,
+            int(mr['startMonth']),
+            int(mr['startDay']),
+            int(mr['endMonth']),
+            int(mr['endDay']),
+        ):
+            return False
+    return True
+
+
 def time_to_minutes(hour: int, minute: int, meridiem: str) -> int:
     """Convert 12-hour clock to minutes since midnight (0–1439)."""
     mer = meridiem.lower().replace('.', '')
+    if mer == 'noon':
+        return 12 * 60 + int(minute)
+    if mer == 'midnight':
+        return int(minute) if int(hour) == 12 else int(hour) * 60 + int(minute)
     h = int(hour) % 12
     if mer == 'pm':
         h += 12
@@ -202,8 +605,20 @@ def _merge_flags(target: dict[str, bool], incoming: dict[str, bool]) -> None:
             flags[k] = True
 
 
+_WEEKDAY_SINGLE_TAIL_RE = re.compile(
+    r',\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?\s*$',
+    re.IGNORECASE,
+)
+
+
 def _extract_day_tail(text: str) -> tuple[str, list[int], dict[str, bool]]:
     """Strip trailing weekday phrase; return (remainder, days, flags)."""
+    m = _WEEKDAY_SINGLE_TAIL_RE.search(text)
+    if m:
+        day_name = m.group(1).lower()
+        day_num = _WEEKDAY_ABBR.get(day_name[:3]) or _WEEKDAY_ABBR.get(day_name)
+        if day_num is not None:
+            return text[: m.start()].strip(), [day_num], {}
     for pat, days, flag_updates in _DAY_TAIL_RULES:
         m = pat.search(text)
         if m:
@@ -336,19 +751,123 @@ def _parse_segment(segment: str) -> tuple[list[dict], dict[str, bool], str | Non
     return all_windows, flags, None
 
 
-def _parse_clause(clause: str) -> tuple[list[dict], dict[str, bool], str | None]:
+def _attach_calendar(windows: list[dict], calendar: dict[str, Any] | None) -> None:
+    if not calendar:
+        return
+    for w in windows:
+        w['calendar'] = dict(calendar)
+
+
+def _parse_each_weekday_clause(clause: str) -> tuple[list[dict], dict[str, Any] | None, dict[str, bool], str | None]:
+    m = _EACH_WEEKDAY_RE.match(clause.strip())
+    if not m:
+        return [], None, {}, 'not each-weekday'
+    day_name = m.group(1).lower()
+    day_num = _WEEKDAY_ABBR.get(day_name[:3]) or _WEEKDAY_ABBR.get(day_name)
+    if day_num is None:
+        return [], None, {}, f'unknown weekday: {day_name}'
+    rest = m.group(2).strip()
+    remainder, calendar = _extract_calendar_tail(rest)
+    if remainder.strip():
+        return [], calendar, {}, f'unparsed after Each weekday: {remainder[:60]}'
+    return [{
+        'days': [day_num],
+        'startMinute': 0,
+        'endMinute': 1439,
+        'crossesMidnight': False,
+    }], calendar, {}, None
+
+
+def _parse_clause(clause: str) -> tuple[list[dict], dict[str, Any] | None, dict[str, bool], str | None]:
     clause = clause.strip().rstrip(',')
+    flags: dict[str, bool] = {}
     if not clause:
-        return [], {}, 'empty clause'
-    return _parse_segment(clause)
+        return [], None, flags, 'empty clause'
+
+    each_windows, each_cal, each_flags, each_err = _parse_each_weekday_clause(clause)
+    if each_err != 'not each-weekday':
+        if each_err:
+            return [], each_cal, each_flags, each_err
+        _attach_calendar(each_windows, each_cal)
+        return each_windows, each_cal, each_flags, None
+
+    anytime_cal = re.match(r'^anytime[,\s]+(.+)$', clause, re.IGNORECASE)
+    if anytime_cal:
+        remainder, calendar = _extract_calendar_tail(anytime_cal.group(1))
+        if not remainder.strip() and calendar:
+            windows = [{
+                'days': list(_ALL_DAYS),
+                'startMinute': 0,
+                'endMinute': 1439,
+                'crossesMidnight': False,
+            }]
+            _attach_calendar(windows, calendar)
+            return windows, calendar, flags, None
+
+    remainder, calendar = _extract_calendar_tail(clause)
+    if not remainder.strip():
+        if calendar:
+            windows = [{
+                'days': list(_ALL_DAYS),
+                'startMinute': 0,
+                'endMinute': 1439,
+                'crossesMidnight': False,
+            }]
+            _attach_calendar(windows, calendar)
+            return windows, calendar, flags, None
+        return [], None, flags, 'empty clause after calendar'
+
+    windows, flags, err = _parse_segment(remainder)
+    if err:
+        body, days, tail_flags = _extract_day_tail(remainder)
+        if body != remainder.strip():
+            _merge_flags({'flags': flags}, tail_flags)
+            windows = [{
+                'days': days,
+                'startMinute': 0,
+                'endMinute': 1439,
+                'crossesMidnight': False,
+            }]
+            err = None
+        else:
+            return [], calendar, flags, err
+    _attach_calendar(windows, calendar)
+    return windows, calendar, flags, None
 
 
-def _has_unsupported_calendar(text: str) -> bool:
-    return bool(_CALENDAR_MARKER_RE.search(text))
+def _parse_inverted(text: str, source: str) -> dict[str, Any]:
+    m = _INVERTED_MARKER_RE.search(text)
+    if not m:
+        return _empty_schedule(source, status='failed')
+    except_body = text[m.end() :].strip().rstrip(',')
+    windows, calendar, flags, err = _parse_clause(except_body)
+    if err or not windows:
+        return _empty_schedule(source, status='failed', unparsedClauses=[except_body] if err else [])
+    out: dict[str, Any] = {
+        'v': SCHEDULE_VERSION,
+        'status': 'ok',
+        'source': source,
+        'inverted': True,
+        'windows': windows,
+    }
+    if calendar:
+        out['calendar'] = calendar
+    if flags:
+        out['flags'] = flags
+    return out
 
 
-def _has_unsupported_inverted(text: str) -> bool:
-    return bool(_INVERTED_MARKER_RE.search(text))
+def _parse_month_list_schedule(text: str, source: str) -> dict[str, Any] | None:
+    months = _parse_month_list(text)
+    if months is None:
+        return None
+    return {
+        'v': SCHEDULE_VERSION,
+        'status': 'anytime',
+        'source': source,
+        'windows': [],
+        'calendar': {'months': months},
+    }
 
 
 def parse_schedule(source: Any) -> dict:
@@ -356,48 +875,72 @@ def parse_schedule(source: Any) -> dict:
     if _is_blank(source):
         return _empty_schedule('', status='failed')
 
-    text = str(source).strip()
+    raw_source = str(source).strip()
+    text = _normalize_source(raw_source)
     normalized = text.casefold()
 
     if normalized == 'anytime':
         return {
             'v': SCHEDULE_VERSION,
             'status': 'anytime',
-            'source': text,
+            'source': raw_source,
             'windows': [],
         }
 
-    if _has_unsupported_inverted(text):
-        return _empty_schedule(text, status='failed')
+    month_list_sched = _parse_month_list_schedule(text, raw_source)
+    if month_list_sched is not None:
+        return month_list_sched
 
-    if _has_unsupported_calendar(text):
-        return _empty_schedule(text, status='failed')
+    if _INVERTED_MARKER_RE.search(text):
+        return _parse_inverted(text, raw_source)
 
     clauses = [c.strip() for c in text.split(';') if c.strip()]
     if not clauses:
-        return _empty_schedule(text, status='failed')
+        return _empty_schedule(raw_source, status='failed')
 
     combined_windows: list[dict] = []
     combined_flags: dict[str, bool] = {}
+    schedule_calendar: dict[str, Any] | None = None
     unparsed: list[str] = []
 
     for clause in clauses:
-        windows, flags, err = _parse_clause(clause)
+        windows, cal, flags, err = _parse_clause(clause)
         _merge_flags({'flags': combined_flags}, flags)
         if err:
             unparsed.append(clause)
         else:
             combined_windows.extend(windows)
+            if cal:
+                schedule_calendar = (
+                    _merge_calendar(schedule_calendar, cal)
+                    if schedule_calendar
+                    else dict(cal)
+                )
 
     if not combined_windows:
-        return _empty_schedule(text, status='failed', unparsedClauses=unparsed)
+        # Anytime + calendar-only clause(s)
+        if schedule_calendar and not unparsed:
+            return {
+                'v': SCHEDULE_VERSION,
+                'status': 'anytime',
+                'source': raw_source,
+                'windows': [],
+                'calendar': schedule_calendar,
+            }
+        return _empty_schedule(
+            raw_source,
+            status='failed',
+            unparsedClauses=unparsed,
+        )
 
     out: dict[str, Any] = {
         'v': SCHEDULE_VERSION,
         'status': 'ok',
-        'source': text,
+        'source': raw_source,
         'windows': combined_windows,
     }
+    if schedule_calendar and all('calendar' not in w for w in combined_windows):
+        out['calendar'] = schedule_calendar
     if combined_flags:
         out['flags'] = combined_flags
     if unparsed:
@@ -422,11 +965,7 @@ def schedule_from_json(raw: Any) -> dict | None:
 
 
 def _calendar_ok(schedule: dict, slot: dict[str, int]) -> bool:
-    cal = schedule.get('calendar')
-    if not cal:
-        return True
-    # Phase D not implemented — should not appear without calendar keys
-    return False
+    return _slot_in_calendar(slot, schedule.get('calendar'))
 
 
 def _minute_in_window(minute: int, start: int, end: int, crosses_midnight: bool) -> bool:
@@ -437,7 +976,20 @@ def _minute_in_window(minute: int, start: int, end: int, crosses_midnight: bool)
     return minute >= start or minute < end
 
 
-def _window_overlaps_slot(window: dict, slot: dict[str, int]) -> bool:
+def _excepts_public_holidays(schedule: dict, window: dict) -> bool:
+    if window.get('flags', {}).get('exceptPublicHolidays'):
+        return True
+    return bool(schedule.get('flags', {}).get('exceptPublicHolidays'))
+
+
+def _window_time_day_match(
+    window: dict,
+    slot: dict[str, int],
+    schedule_calendar: dict[str, Any] | None = None,
+) -> bool:
+    cal = window.get('calendar') or schedule_calendar
+    if not _slot_in_calendar(slot, cal):
+        return False
     days = window.get('days', _ALL_DAYS)
     if slot['dayOfWeek'] not in days:
         return False
@@ -449,6 +1001,32 @@ def _window_overlaps_slot(window: dict, slot: dict[str, int]) -> bool:
     )
 
 
+def _window_overlaps_slot(
+    window: dict,
+    slot: dict[str, int],
+    schedule: dict,
+    schedule_calendar: dict[str, Any] | None = None,
+) -> bool:
+    """Normal schedule: window match minus public-holiday exclusion when flagged."""
+    if not _window_time_day_match(window, slot, schedule_calendar):
+        return False
+    if _excepts_public_holidays(schedule, window) and is_public_holiday(slot):
+        return False
+    return True
+
+
+def _except_window_matches(
+    window: dict,
+    slot: dict[str, int],
+    schedule: dict,
+    schedule_calendar: dict[str, Any] | None = None,
+) -> bool:
+    """Inverted schedule: except-window match includes flagged public holidays."""
+    if _excepts_public_holidays(schedule, window) and is_public_holiday(slot):
+        return True
+    return _window_time_day_match(window, slot, schedule_calendar)
+
+
 def overlaps_membership(schedule: dict | None, slot: dict[str, int]) -> bool:
     """Return whether *schedule* overlaps the membership slot."""
     if not schedule:
@@ -456,12 +1034,20 @@ def overlaps_membership(schedule: dict | None, slot: dict[str, int]) -> bool:
     status = schedule.get('status')
     if status == 'failed':
         return False
-    if not _calendar_ok(schedule, slot):
+    schedule_cal = schedule.get('calendar')
+    if not _slot_in_calendar(slot, schedule_cal):
         return False
+    windows = schedule.get('windows', [])
+    if schedule.get('inverted'):
+        if not windows:
+            return status == 'anytime'
+        return not any(
+            _except_window_matches(w, slot, schedule, schedule_cal) for w in windows
+        )
     if status == 'anytime':
         return True
-    for window in schedule.get('windows', []):
-        if _window_overlaps_slot(window, slot):
+    for window in windows:
+        if _window_overlaps_slot(window, slot, schedule, schedule_cal):
             return True
     return False
 

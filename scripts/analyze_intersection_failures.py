@@ -58,7 +58,9 @@ def categorize_cross(cross: str) -> str:
         return 'abbrev_with_period'
     if "'" in c:
         return 'apostrophe_name'
-    if 'parkway' in cl:
+    if 'parkway' in cl and not re.search(
+        r'parkway\s+\w+\s+(?:drive|dr|road|rd)\b', cl,
+    ):
         return 'parkway_spelling'
     if re.search(r'\bgate\b', cl) and 'gateway' not in cl:
         return 'gate_spelling'
@@ -157,7 +159,12 @@ def compute_subcause(
         return 'resolved'
     cross_s = str(cross).strip()
     highway_s = str(highway).strip()
-    if '/' in cross_s:
+    cross_l = cross_s.lower()
+    if re.search(r'\bleg\s+of\b', cross_l) or re.search(
+        r'(?:north|south|east|west)/(?:north|south|east|west)', cross_l,
+    ):
+        return 'leg_phrase'
+    if '/' in cross_s and 'leg of' not in cross_l:
         return 'slash_compound_cross'
     if cross_s.lower() == highway_s.lower():
         return 'failed_field_is_highway'

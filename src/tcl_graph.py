@@ -490,6 +490,34 @@ def component_linestring_m(graph: StreetGraph, start_id: int) -> LineString | No
     return merged
 
 
+def farthest_node_in_component(graph: StreetGraph, start_id: int) -> int | None:
+    """Intersection node in *start_id*'s component with the longest graph path from *start_id*."""
+    start_id = int(start_id)
+    edges = connected_component_edges(graph, start_id)
+    nodes: set[int] = set()
+    for edge in edges:
+        nodes.add(edge.from_id)
+        nodes.add(edge.to_id)
+    if len(nodes) <= 1:
+        return None
+
+    best_id: int | None = None
+    best_len = -1.0
+    for node_id in nodes:
+        if node_id == start_id:
+            continue
+        path = shortest_path(graph, start_id, node_id)
+        if path is None:
+            continue
+        length = path_length_m(path)
+        if length > best_len:
+            best_len = length
+            best_id = node_id
+    if best_id is None or best_len < 1e-3:
+        return None
+    return best_id
+
+
 def path_from_start_to_terminus(
     graph: StreetGraph,
     start_id: int,
@@ -497,7 +525,7 @@ def path_from_start_to_terminus(
     terminus_dist_fn,
 ) -> tuple[list[StreetEdge], int] | None:
     """
-    Walk from start_id toward the compass terminus on the local component.
+    Walk from start_id to the compass terminus on the local component.
     Returns (edge path, end_node_id) where end_node is the terminus node.
     """
     comp_line = component_linestring_m(graph, start_id)
@@ -510,15 +538,17 @@ def path_from_start_to_terminus(
         return None
     start_dist = comp_line.project(start_pt)
 
-    if terminus_dist >= start_dist:
-        target_dist = comp_line.length
-    else:
-        target_dist = 0.0
-
+    target_dist = max(0.0, min(comp_line.length, terminus_dist))
     target_pt = comp_line.interpolate(target_dist)
     end_id = _nearest_node_on_component(graph, start_id, target_pt)
     if end_id is None:
         return None
+
+    if end_id == start_id and abs(start_dist - target_dist) > 1e-3:
+        end_id = farthest_node_in_component(graph, start_id) or end_id
+
+    if end_id == start_id:
+        return [], start_id
 
     path = shortest_path(graph, start_id, end_id)
     if path is None:
