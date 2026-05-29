@@ -227,6 +227,8 @@ Toronto Centreline is stored as a **graph**, not a single merged polyline:
 
 **Block-family rules** (`block`, `parenthetical_block`, `parenthetical_end_block`, `parenthetical_dual_block`, `block_to_terminus`, `parenthetical_to_terminus`) use graph paths: resolve cross streets to `INTERSECTION_ID`s, BFS shortest path on street edges, concatenate segment lines. When multiple IDs match a cross street (e.g. duplicate Colbeck nodes on Armadale), the engine picks the ID pair with the shortest valid path (fewest edges, then shortest length).
 
+When start and end intersections lie on **disconnected TCL components** (common at offset intersections such as Manning Ave at Bloor St W or Queen St W), the engine builds a **`MultiLineString`**: one centreline path per fragment, each walked from its anchor toward the other cross street, with **no synthetic bridge** across the gap. Successful rows may include GeoJSON property `disjoint_block: true`.
+
 **Offset / terminus rules** (Phase 2) still use **merge-longest** — all TCL chunks for a street name merged to one centreline, then `substring` by projected distance. See `.cursor/plans/tcl_graph_geometry_fix_0db8c334.plan.md` for the offset-rule redesign.
 
 Distances along centreline: EPSG:4326 ↔ EPSG:32617; offset rules use **along-line signed distance** (arc length from intersection anchors, sign from local tangent vs N/S/E/W).
@@ -239,8 +241,8 @@ Distances along centreline: EPSG:4326 ↔ EPSG:32617; offset rules use **along-l
 |---------------|------|
 | `STREET_NOT_FOUND` | No TCL match for `Highway` |
 | `INTERSECTION_NOT_FOUND` | Start or end intersection not found |
-| `DISCONNECTED_BLOCK` | Block-family rule: no graph path between resolved intersection IDs on this highway |
-| `AMBIGUOUS_INTERSECTION` | Multiple ID pairs tie on shortest path, or parenthetical qualifier cannot disambiguate |
+| `DISCONNECTED_BLOCK` | Block-family rule: no graph path between resolved intersection IDs and disjoint multi-fragment retry failed (e.g. no overlapping TCL components) |
+| `AMBIGUOUS_INTERSECTION` | Multiple ID pairs tie on shortest path, or parenthetical qualifier cannot disambiguate (not used for offset-intersection disconnects) |
 | `UNSUPPORTED_RULE_TYPE` | Unknown `rule_type` |
 | `GEOMETRY_ERROR` | Projection/slicing exception or empty geometry (non-zero-span failures) |
 | `ZERO_SPAN` | Parsed rule has no mappable curb segment (e.g. anchor already at terminus); excluded from map GeoJSON — expected skip, not a bug. `block_to_terminus` uses **geographic** east/west on the graph component (not polyline parameter 0/length); cul-de-sac fallback walks to the farthest node when compass span collapses. |

@@ -175,13 +175,22 @@ def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
     if hit:
         return hit
 
-    from intersection_pair_resolve import resolve_pair_via_roots
+    from intersection_pair_resolve import (
+        resolve_pair_via_roots,
+        resolve_pair_via_unique_legal_variant,
+    )
 
     for name_1 in _lookup_name_candidates(street_1):
         for name_2 in _lookup_name_candidates(street_2):
             root_match = resolve_pair_via_roots(name_1, name_2)
             if root_match is not None:
                 return (root_match.intersection_id,)
+
+    for name_1 in _lookup_name_candidates(street_1):
+        for name_2 in _lookup_name_candidates(street_2):
+            variant_hit = resolve_pair_via_unique_legal_variant(name_1, name_2)
+            if variant_hit:
+                return variant_hit
     return ()
 
 

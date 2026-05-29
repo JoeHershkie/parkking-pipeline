@@ -49,6 +49,10 @@ _COMPASS_DIRS = frozenset({
 _CARDINAL_DIRS = frozenset({'north', 'south', 'east', 'west'})
 
 _POINT_METRES_FRAGMENT_RE = re.compile(r'^a point\s+.*\bmetres\b', re.IGNORECASE)
+_LANE_POSITION_TAIL_IN_ANCHOR_RE = re.compile(
+    r',\s*(?:(?:first|second|third)\s+)?(?:north|south|east|west)\s+of\s+',
+    re.IGNORECASE,
+)
 
 # string fields required per rule_type (qualifiers optional unless listed)
 _RULE_REQUIRED_STRINGS: dict[str, tuple[str, ...]] = {
@@ -145,6 +149,8 @@ def _anchor_ok(value) -> bool:
         return False
     tl = text.lower()
     if 'lane' in tl and ('point' in tl or 'metres' in tl):
+        return False
+    if _LANE_POSITION_TAIL_IN_ANCHOR_RE.search(text):
         return False
     return True
 

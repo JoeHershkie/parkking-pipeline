@@ -534,6 +534,28 @@ def _path_result_to_slice(pick: PathPick) -> SliceResult:
     return SliceResult(geom)
 
 
+def _try_disjoint_block_slice(
+    graph: StreetGraph,
+    highway: str,
+    cross_start: str,
+    cross_end: str,
+    *,
+    start_qualifier: str | None = None,
+    end_qualifier: str | None = None,
+) -> SliceResult | None:
+    geom = tg.slice_disjoint_block_paths(
+        graph,
+        highway,
+        cross_start,
+        cross_end,
+        start_qualifier=start_qualifier,
+        end_qualifier=end_qualifier,
+    )
+    if geom is None or geom.is_empty:
+        return None
+    return SliceResult(geom)
+
+
 def _block_pair_failure(
     highway: str, cross_a: str, cross_b: str,
 ) -> SliceResult:
@@ -585,6 +607,17 @@ def _pick_qualified_block(
         leg_compass=leg_compass,
     )
     if pick is None:
+        if not tied:
+            disjoint = _try_disjoint_block_slice(
+                graph,
+                highway,
+                cross_start,
+                cross_end,
+                start_qualifier=start_qualifier,
+                end_qualifier=end_qualifier,
+            )
+            if disjoint is not None:
+                return disjoint
         return _block_pair_failure(highway, cross_start, cross_end)
     if tied:
         return SliceResult(
@@ -630,11 +663,21 @@ def slice_block_path(
             return SliceResult(
                 None, INTERSECTION_NOT_FOUND, f'end_intersection={cross_end}',
             )
-        if ids_a and ids_b:
+        kind = tg.classify_intersection_pair_failure(
+            graph, highway, cross_start, cross_end,
+        )
+        if kind == 'tied':
             return SliceResult(
                 None, AMBIGUOUS_INTERSECTION,
                 f'{cross_start} to {cross_end}',
             )
+        disjoint = _try_disjoint_block_slice(
+            graph, highway, cross_start, cross_end,
+            start_qualifier=start_qualifier,
+            end_qualifier=end_qualifier,
+        )
+        if disjoint is not None:
+            return disjoint
         return _block_pair_failure(highway, cross_start, cross_end)
     return _path_result_to_slice(pick)
 
@@ -1053,6 +1096,8 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
             'schedule': schedule,
             'geometry': result.geometry,
         }
+        if result.geometry.geom_type == 'MultiLineString':
+            props['disjoint_block'] = True
         return props, None
 
     if result.reason_code:

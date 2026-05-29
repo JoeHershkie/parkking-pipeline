@@ -85,3 +85,57 @@ def test_lookup_highway_key_lane(tcl_lane_index: None) -> None:
 def test_resolve_christie_without_cross_is_ambiguous(tcl_lane_index: None) -> None:
     key = resolve_lane_highway('Lane first east of Christie Street', '')
     assert key is None
+
+
+@pytest.fixture(scope='module')
+def tcl_lane_graph_index() -> None:
+    """Street index + graphs for lane block disambiguation (needs TCL geo files)."""
+    import geopandas as gpd
+    import tcl_graph as tg
+
+    from lane_highway_resolve import reset_lane_resolve_caches
+
+    streets = data_path('tcl_streets.geojson')
+    ix_path = data_path('tcl_intersections.geojson')
+    if not streets.exists() or not ix_path.exists():
+        pytest.skip('TCL geo files not present')
+
+    reset_lane_resolve_caches()
+    tcl = pd.read_csv(data_path('tcl_street_names.csv'))
+    thr.build_index_from_csv(legal_keys={
+        tcl_highway_key(x) for x in tcl['linear_name_full_legal'].dropna()
+    })
+    tg.configure_intersections(gpd.read_file(ix_path))
+
+
+def test_resolve_generic_lane_block_sibley_victoria_stays_ambiguous_with_graph(
+    tcl_lane_graph_index: None,
+) -> None:
+    """
+    Block crosses + lane tail: east/west ``ln n danforth`` families both match;
+    no single legal key has a graph path Sibley ↔ Victoria Park — do not guess.
+    """
+    between = (
+        'Sibley Avenue and Victoria Park Avenue, first north of Danforth Avenue'
+    )
+    parsed = {
+        'rule_type': 'block',
+        'start_intersection': 'Sibley Avenue',
+        'end_intersection': 'Victoria Park Avenue',
+    }
+    assert resolve_lane_highway('Lane', between, parsed) is None
+
+
+def test_resolve_generic_lane_block_stays_ambiguous_without_graph(
+    tcl_lane_index: None,
+) -> None:
+    """CSV-only index: multiple ``ln`` keys, no graph → no guess."""
+    between = (
+        'Sibley Avenue and Victoria Park Avenue, first north of Danforth Avenue'
+    )
+    parsed = {
+        'rule_type': 'block',
+        'start_intersection': 'Sibley Avenue',
+        'end_intersection': 'Victoria Park Avenue',
+    }
+    assert resolve_lane_highway('Lane', between, parsed) is None

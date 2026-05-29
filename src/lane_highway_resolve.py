@@ -51,8 +51,19 @@ _LANE_PLACEHOLDER_RE = re.compile(
     r'^(?:lane\s*,?\s*(?:(?:first|second|third)\s+)?(?:north|south|east|west)\s+of|laneway\b|lane)$',
     re.I,
 )
+_LANE_POSITION_TAIL_IN_ANCHOR_RE = re.compile(
+    r',\s*(?:(?:first|second|third)\s+)?(?:north|south|east|west)\s+of\s+',
+    re.I,
+)
+_BLOCK_RULE_TYPES = frozenset({
+    'block',
+    'parenthetical_block',
+    'parenthetical_end_block',
+    'parenthetical_dual_block',
+})
 
 _LN_P1_INDEX: list[tuple[str | None, str, str, str, str, str]] = []
+_STREET_GRAPHS_CACHE: dict | None = None
 _LN_P2_INDEX: list[tuple[str | None, str, str, str, str, str]] = []
 _LN_INDEX_READY = False
 
@@ -66,8 +77,9 @@ class LanePhrase:
 
 def reset_lane_resolve_caches() -> None:
     """Clear caches after TCL street index rebuild (tests / hot reload)."""
-    global _LN_INDEX_READY
+    global _LN_INDEX_READY, _STREET_GRAPHS_CACHE
     _LN_INDEX_READY = False
+    _STREET_GRAPHS_CACHE = None
     _lookup_highway_key_cached.cache_clear()
 
 
@@ -182,6 +194,93 @@ def _component_matches(ln_component: str, resolved_key: str) -> bool:
     return resolved_key == ln_component or resolved_key.startswith(ln_component + ' ')
 
 
+def _cross_hint_ok(hint: str) -> bool:
+    """True when a parsed/Between cross-street hint is a real street name."""
+    text = str(hint).strip()
+    if not text:
+        return False
+    if _LANE_POSITION_TAIL_IN_ANCHOR_RE.search(text):
+        return False
+    if _LANE_POSITION_RE.match(text) or _LANEWAY_POSITION_RE.match(text):
+        return False
+    if _POINT_AND_RE.match(text):
+        return False
+    return True
+
+
+def _block_cross_streets(parsed: dict | None) -> tuple[str, str] | None:
+    """Distinct block start/end crosses when both are usable street names."""
+    if not parsed or parsed.get('rule_type') not in _BLOCK_RULE_TYPES:
+        return None
+    start = str(parsed.get('start_intersection') or '').strip()
+    end = str(parsed.get('end_intersection') or '').strip()
+    if not (_cross_hint_ok(start) and _cross_hint_ok(end)):
+        return None
+    if start.lower() == end.lower():
+        return None
+    return start, end
+
+
+def _lazy_street_graphs() -> dict:
+    """Load cached street graphs + intersection index (for non-arbitrary lane disambiguation)."""
+    global _STREET_GRAPHS_CACHE
+    if _STREET_GRAPHS_CACHE is not None:
+        return _STREET_GRAPHS_CACHE
+    try:
+        import geopandas as gpd
+        import geo_cache as gc
+        import tcl_graph as tg
+        from paths import data_path
+
+        streets_path = data_path('tcl_streets.geojson')
+        ix_path = data_path('tcl_intersections.geojson')
+        if not streets_path.exists() or not ix_path.exists():
+            _STREET_GRAPHS_CACHE = {}
+            return _STREET_GRAPHS_CACHE
+
+        tg.configure_intersections(gpd.read_file(ix_path))
+
+        cached = gc.load_street_graphs(streets_path)
+        if cached is not None:
+            _STREET_GRAPHS_CACHE = cached
+        else:
+            st_gdf = gpd.read_file(streets_path)
+            _STREET_GRAPHS_CACHE = tg.build_street_graphs(st_gdf)
+            gc.save_street_graphs(streets_path, _STREET_GRAPHS_CACHE)
+    except Exception:
+        _STREET_GRAPHS_CACHE = {}
+    return _STREET_GRAPHS_CACHE
+
+
+def _disambiguate_lane_by_block_graph(
+    candidates: list[str],
+    cross_a: str,
+    cross_b: str,
+) -> str | None:
+    """
+    When exactly one candidate highway admits a unique graph path between two block
+  crosses, return that key. Otherwise None (keep ambiguity).
+    """
+    if len(candidates) < 2:
+        return None
+    graphs = _lazy_street_graphs()
+    if not graphs:
+        return None
+
+    import tcl_graph as tg
+
+    hits: list[str] = []
+    for key in candidates:
+        graph = graphs.get(key)
+        if graph is None:
+            continue
+        if tg.pick_intersection_pair(graph, key, cross_a, cross_b) is not None:
+            hits.append(key)
+    if len(hits) == 1:
+        return hits[0]
+    return None
+
+
 def _resolve_cross_keys(
     between: str,
     parsed: dict | None,
@@ -197,7 +296,7 @@ def _resolve_cross_keys(
     if parsed:
         for col in ('start_intersection', 'end_intersection', 'terminus_street'):
             val = parsed.get(col)
-            if val and str(val).strip():
+            if val and _cross_hint_ok(str(val)):
                 hints.append(str(val).strip())
 
     for phrase in phrases:
@@ -436,6 +535,12 @@ def resolve_lane_legal(
         narrowed = _apply_ordinal(unique, phrase.ordinal)
         if len(narrowed) == 1:
             return narrowed[0]
+        pool = narrowed if narrowed else unique
+        block = _block_cross_streets(parsed)
+        if block is not None:
+            picked = _disambiguate_lane_by_block_graph(pool, block[0], block[1])
+            if picked is not None:
+                return picked
         return None
 
     # One phrase matched (others eliminated by cross-street constraints).
@@ -449,6 +554,11 @@ def resolve_lane_legal(
                 narrowed = _apply_ordinal(only, p.ordinal)
                 if len(narrowed) == 1:
                     return narrowed[0]
+        block = _block_cross_streets(parsed)
+        if block is not None:
+            picked = _disambiguate_lane_by_block_graph(only, block[0], block[1])
+            if picked is not None:
+                return picked
         return None
 
     return _resolve_named_lane_graph(phrase, keys)

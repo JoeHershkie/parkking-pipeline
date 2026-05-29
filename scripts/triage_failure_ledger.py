@@ -393,7 +393,8 @@ def assign_fix_tier(row: pd.Series, alias_names: set[str]) -> tuple[str, str, st
         return (
             'D_hard',
             'disconnected_block',
-            'No graph path between resolved intersection IDs on highway',
+            'No graph path on highway; disjoint multi-fragment retry failed '
+            '(offset intersection or true TCL gap)',
         )
 
     return (

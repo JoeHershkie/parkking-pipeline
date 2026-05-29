@@ -6,6 +6,7 @@ import math
 import re
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Literal
 
 import geopandas as gpd
 import pandas as pd
@@ -17,6 +18,10 @@ import intersection_index as ix_index
 
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
 project_to_gps = pyproj.Transformer.from_crs(32617, 4326, always_xy=True).transform
+
+_COLLAPSE_TOL_M = 1e-3
+_AXIS_OVERLAP_TOL_M = 1.0
+PairFailureKind = Literal['missing', 'no_path', 'tied', 'ok']
 
 _intersections_gdf: gpd.GeoDataFrame | None = None
 _node_points_gps: dict[int, Point] = {}
@@ -283,6 +288,344 @@ def pick_intersection_pair(
     if best is None or tied:
         return None
     return best
+
+
+def classify_intersection_pair_failure(
+    graph: StreetGraph,
+    highway: str,
+    cross_a: str,
+    cross_b: str,
+) -> PairFailureKind:
+    """Classify why ``pick_intersection_pair`` would return None."""
+    ids_a = resolve_intersection_ids(highway, cross_a)
+    ids_b = resolve_intersection_ids(highway, cross_b)
+    if not ids_a or not ids_b:
+        return 'missing'
+
+    best: PathPick | None = None
+    tied = False
+
+    for id_a in ids_a:
+        for id_b in ids_b:
+            if id_a == id_b:
+                continue
+            path = shortest_path(graph, id_a, id_b)
+            if path is None:
+                continue
+            length = path_length_m(path)
+            candidate = PathPick(id_a, id_b, path, length)
+            if best is None:
+                best = candidate
+                tied = False
+                continue
+            if len(path) < len(best.edges):
+                best = candidate
+                tied = False
+            elif len(path) == len(best.edges):
+                if length < best.length_m - 1e-3:
+                    best = candidate
+                    tied = False
+                elif abs(length - best.length_m) < 1e-3:
+                    tied = True
+
+    if best is not None and not tied:
+        return 'ok'
+    if tied:
+        return 'tied'
+    return 'no_path'
+
+
+def _node_point_m(node_id: int) -> Point | None:
+    pt = node_point_gps(node_id)
+    if pt is None:
+        return None
+    return transform(project_to_meters, pt)
+
+
+def _axis_from_points(start_m: Point, end_m: Point) -> tuple[Point, float, float, float] | None:
+    """Return (origin_point, axis_len, ux, uy) or None if degenerate."""
+    dx = end_m.x - start_m.x
+    dy = end_m.y - start_m.y
+    axis_len = math.hypot(dx, dy)
+    if axis_len < _COLLAPSE_TOL_M:
+        return None
+    return start_m, axis_len, dx / axis_len, dy / axis_len
+
+
+def _projection_on_axis(
+    pt_m: Point,
+    origin: Point,
+    ux: float,
+    uy: float,
+) -> float:
+    return (pt_m.x - origin.x) * ux + (pt_m.y - origin.y) * uy
+
+
+def _reachable_nodes_in_component(
+    graph: StreetGraph,
+    from_id: int,
+    comp: frozenset[int],
+) -> set[int]:
+    from_id = int(from_id)
+    if from_id not in comp:
+        return set()
+    seen: set[int] = {from_id}
+    queue: deque[int] = deque([from_id])
+    while queue:
+        node = queue.popleft()
+        for neighbor, _edge in graph.adj.get(node, []):
+            if neighbor in comp and neighbor not in seen:
+                seen.add(neighbor)
+                queue.append(neighbor)
+    return seen
+
+
+def extreme_node_toward(
+    graph: StreetGraph,
+    from_id: int,
+    comp: frozenset[int],
+    origin: Point,
+    ux: float,
+    uy: float,
+    *,
+    maximize: bool,
+) -> int | None:
+    """Farthest reachable node along +axis (maximize) or -axis (not maximize)."""
+    reachable = _reachable_nodes_in_component(graph, from_id, comp)
+    if len(reachable) <= 1:
+        return int(from_id) if from_id in reachable else None
+
+    best_id: int | None = None
+    best_proj = -math.inf if maximize else math.inf
+    for node_id in reachable:
+        pt_m = _node_point_m(node_id)
+        if pt_m is None:
+            continue
+        proj = _projection_on_axis(pt_m, origin, ux, uy)
+        if maximize:
+            if proj > best_proj + 1e-6:
+                best_proj = proj
+                best_id = node_id
+        elif proj < best_proj - 1e-6:
+            best_proj = proj
+            best_id = node_id
+    return best_id
+
+
+def _component_projection_interval(
+    comp: frozenset[int],
+    origin: Point,
+    ux: float,
+    uy: float,
+) -> tuple[float, float] | None:
+    projs: list[float] = []
+    for node_id in comp:
+        pt_m = _node_point_m(node_id)
+        if pt_m is None:
+            continue
+        projs.append(_projection_on_axis(pt_m, origin, ux, uy))
+    if not projs:
+        return None
+    return min(projs), max(projs)
+
+
+def _node_nearest_projection(
+    comp: frozenset[int],
+    target_proj: float,
+    origin: Point,
+    ux: float,
+    uy: float,
+) -> int | None:
+    best_id: int | None = None
+    best_dist = math.inf
+    for node_id in comp:
+        pt_m = _node_point_m(node_id)
+        if pt_m is None:
+            continue
+        proj = _projection_on_axis(pt_m, origin, ux, uy)
+        d = abs(proj - target_proj)
+        if d < best_dist:
+            best_dist = d
+            best_id = node_id
+    return best_id
+
+
+def _resolve_axis_anchor_id(
+    graph: StreetGraph,
+    highway: str,
+    cross: str,
+    ids_all: list[int],
+    qualifier: str | None,
+) -> int | None:
+    if not ids_all:
+        return None
+    if len(ids_all) == 1:
+        return int(ids_all[0])
+    if not qualifier:
+        return int(ids_all[0])
+    for comp in graph_components(graph):
+        comp_ids = [i for i in ids_all if i in comp]
+        if not comp_ids:
+            continue
+        anchor = comp_ids[0]
+        line_m = component_linestring_m(graph, anchor)
+        if line_m is None or line_m.is_empty:
+            continue
+        picked = pick_id_with_qualifier(
+            highway, cross, qualifier, line_m, allowed_ids=comp,
+        )
+        if picked is not None:
+            return int(picked)
+    return int(ids_all[0])
+
+
+def _span_component_path(
+    graph: StreetGraph,
+    comp: frozenset[int],
+    *,
+    start_id: int | None,
+    end_id: int | None,
+    origin: Point,
+    ux: float,
+    uy: float,
+    axis_len: float,
+) -> LineString | None:
+    """Build one GPS line for a component's contribution to a disjoint block."""
+    if start_id is not None and end_id is not None:
+        if start_id == end_id:
+            return slice_path_between([], start_id, end_id)
+        path = shortest_path(graph, start_id, end_id)
+        if path is None:
+            return None
+        return slice_path_between(path, start_id, end_id)
+
+    if start_id is not None:
+        target = extreme_node_toward(
+            graph, start_id, comp, origin, ux, uy, maximize=True,
+        )
+        if target is None:
+            return None
+        path = shortest_path(graph, start_id, target)
+        if path is None:
+            return None
+        return slice_path_between(path, start_id, target)
+
+    if end_id is not None:
+        target = extreme_node_toward(
+            graph, end_id, comp, origin, ux, uy, maximize=False,
+        )
+        if target is None:
+            return None
+        path = shortest_path(graph, target, end_id)
+        if path is None:
+            return None
+        return slice_path_between(path, target, end_id)
+
+    interval = _component_projection_interval(comp, origin, ux, uy)
+    if interval is None:
+        return None
+    comp_min, comp_max = interval
+    clip_lo = max(0.0, comp_min)
+    clip_hi = min(axis_len, comp_max)
+    if clip_hi < clip_lo - _AXIS_OVERLAP_TOL_M:
+        return None
+    id_lo = _node_nearest_projection(comp, clip_lo, origin, ux, uy)
+    id_hi = _node_nearest_projection(comp, clip_hi, origin, ux, uy)
+    if id_lo is None or id_hi is None:
+        return None
+    if id_lo == id_hi:
+        return slice_path_between([], id_lo, id_hi)
+    path = shortest_path(graph, id_lo, id_hi)
+    if path is None:
+        return None
+    return slice_path_between(path, id_lo, id_hi)
+
+
+def slice_disjoint_block_paths(
+    graph: StreetGraph,
+    highway: str,
+    cross_start: str,
+    cross_end: str,
+    *,
+    start_qualifier: str | None = None,
+    end_qualifier: str | None = None,
+) -> MultiLineString | None:
+    """
+  Build a MultiLineString block across disconnected TCL components.
+
+  Each fragment is walked from its anchor toward the other cross street; gaps
+  at offset intersections are not bridged.
+  """
+    start_ids_all = resolve_intersection_ids(highway, cross_start)
+    end_ids_all = resolve_intersection_ids(highway, cross_end)
+    if not start_ids_all or not end_ids_all:
+        return None
+
+    start_anchor = _resolve_axis_anchor_id(
+        graph, highway, cross_start, start_ids_all, start_qualifier,
+    )
+    end_anchor = _resolve_axis_anchor_id(
+        graph, highway, cross_end, end_ids_all, end_qualifier,
+    )
+    if start_anchor is None or end_anchor is None:
+        return None
+
+    start_m = _node_point_m(start_anchor)
+    end_m = _node_point_m(end_anchor)
+    if start_m is None or end_m is None:
+        return None
+
+    axis = _axis_from_points(start_m, end_m)
+    if axis is None:
+        return None
+    origin, axis_len, ux, uy = axis
+
+    segments: list[LineString] = []
+    for comp in graph_components(graph):
+        interval = _component_projection_interval(comp, origin, ux, uy)
+        if interval is None:
+            continue
+        comp_min, comp_max = interval
+        if comp_max < -_AXIS_OVERLAP_TOL_M or comp_min > axis_len + _AXIS_OVERLAP_TOL_M:
+            continue
+
+        start_on = start_anchor if start_anchor in comp else None
+        end_on = end_anchor if end_anchor in comp else None
+        geom = _span_component_path(
+            graph,
+            comp,
+            start_id=start_on,
+            end_id=end_on,
+            origin=origin,
+            ux=ux,
+            uy=uy,
+            axis_len=axis_len,
+        )
+        if geom is None or geom.is_empty or geom.length < _COLLAPSE_TOL_M:
+            continue
+        segments.append(geom)
+
+    if not segments:
+        return None
+
+    segments.sort(
+        key=lambda g: _projection_on_axis(
+            transform(project_to_meters, Point(g.coords[0])),
+            origin,
+            ux,
+            uy,
+        ),
+    )
+
+    total_len = sum(
+        transform(project_to_meters, seg).length for seg in segments
+    )
+    if total_len < _COLLAPSE_TOL_M:
+        return None
+
+    if len(segments) == 1:
+        return MultiLineString([segments[0]])
+    return MultiLineString(segments)
 
 
 def _disambiguate_project_dist(projects: list[float], qualifier: str) -> float | None:

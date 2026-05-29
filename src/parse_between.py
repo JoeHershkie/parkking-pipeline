@@ -36,7 +36,11 @@ _COMPASS_END = (
 _APPROX = r'(?:approximately )?'
 _METRES = r'\d+(?:\.\d+)?'
 _DIR = r'north|south|east|west'
-_COMPOUND_DIR = rf'(?:{_COMPASS})(?:\s+and\s+(?:{_COMPASS}))?'
+_COMPOUND_DIR = (
+    rf'(?:{_COMPASS})(?:\s+and\s+(?:{_COMPASS})|\s+(?:{_COMPASS}))?'
+)
+# Optional parenthetical qualifier after anchor (captured with street for qualifier split).
+_OPT_PAREN_IN_ANCHOR = r'(?:\s*\([^)]+\))?'
 
 _FURTHER_TAIL = (
     rf'(?:further {_COMPOUND_DIR}(?:\s+thereof)?'
@@ -93,8 +97,17 @@ class _Patterns:
     parenthetical_end_block: re.Pattern
     parenthetical_dual_block: re.Pattern
     block_to_terminus: re.Pattern
+    terminus_end_block: re.Pattern
+    terminus_end_opposite: re.Pattern
+    street_and_terminus_end: re.Pattern
+    metric_and_opposite_limit: re.Pattern
+    metric_and_metric_of: re.Pattern
+    terminus_end_and_offset: re.Pattern
+    terminus_end_same_metric: re.Pattern
+    street_and_further_metric: re.Pattern
     terminus_to_terminus: re.Pattern
     parenthetical_block: re.Pattern
+    block_lane_tail: re.Pattern
     block: re.Pattern
     intersect_extension: re.Pattern
     intersect_thereof: re.Pattern
@@ -104,7 +117,8 @@ class _Patterns:
 def _compile_patterns() -> _Patterns:
     return _Patterns(
         offset_span=re.compile(
-            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of (?P<start_intersection>.*?) '
+            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
             rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR})$',
             re.IGNORECASE,
         ),
@@ -155,17 +169,20 @@ def _compile_patterns() -> _Patterns:
         ),
         offset_to_intersect=re.compile(
             rf'^A point {_APPROX}(?P<distance>{_METRES}) metres (?P<direction>{_COMPOUND_DIR}) of '
-            rf'(?P<start_intersection>.*?) and (?P<end_intersection>.*?)$',
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) and (?P<end_intersection>.*?)$',
             re.IGNORECASE,
         ),
         relative_extension=re.compile(
-            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of (?P<start_intersection>.*?) '
+            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
             rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres {_FURTHER_TAIL}$',
             re.IGNORECASE,
         ),
         dual_anchor=re.compile(
-            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of (?P<start_intersection>.*?) '
-            rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR}) of (?P<end_intersection>.*?)$',
+            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
+            rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR}) of '
+            rf'(?P<end_intersection>.+?{_OPT_PAREN_IN_ANCHOR})$',
             re.IGNORECASE,
         ),
         parenthetical_to_terminus=re.compile(
@@ -187,14 +204,74 @@ def _compile_patterns() -> _Patterns:
             rf'^(?P<start_intersection>.*?) and the (?P<terminus_direction>{_COMPASS_END}) end of (?P<terminus_street>.*?)$',
             re.IGNORECASE,
         ),
+        terminus_end_block=re.compile(
+            rf'^the (?P<terminus_direction>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street>.+?)\s+and\s+'
+            rf'(?P<start_intersection>(?!the\s+(?:{_COMPASS_END})\s+end\s+of|a\s+point).+?)$',
+            re.IGNORECASE,
+        ),
+        terminus_end_opposite=re.compile(
+            rf'^the (?P<terminus_direction>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street>.+?)\s+and\s+a\s+point\s+opposite\s+'
+            rf'(?:the\s+.+?\blimit\s+of\s+)?(?P<end_intersection>.+?)$',
+            re.IGNORECASE,
+        ),
+        street_and_terminus_end=re.compile(
+            rf'^(?P<start_intersection>.+?)\s+and\s+'
+            rf'(?P<terminus_direction>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street>.+?)$',
+            re.IGNORECASE,
+        ),
+        metric_and_opposite_limit=re.compile(
+            rf'^A point {_APPROX}(?P<distance>{_METRES}) metres (?P<direction>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
+            rf'and a point opposite (?:the\s+.+?\blimit\s+of\s+)?(?P<end_intersection>.+?)$',
+            re.IGNORECASE,
+        ),
+        metric_and_metric_of=re.compile(
+            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
+            rf'and {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR}) of (?P<end_intersection>.+?)$',
+            re.IGNORECASE,
+        ),
+        terminus_end_and_offset=re.compile(
+            rf'^the (?P<terminus_direction>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street>.+?)\s+and\s+a\s+point\s+{_APPROX}'
+            rf'(?P<distance>{_METRES})\s+metres\s+(?P<direction>{_COMPOUND_DIR})\s+of\s+'
+            rf'(?P<offset_anchor>.+?)$',
+            re.IGNORECASE,
+        ),
+        terminus_end_same_metric=re.compile(
+            rf'^the (?P<terminus_direction>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street>.+?)\s+and\s+a\s+point\s+{_APPROX}'
+            rf'(?P<distance>{_METRES})\s+metres\s+(?P<direction>{_COMPOUND_DIR})\s+of\s+'
+            rf'the\s+(?P<terminus_direction2>{_COMPASS_END})\s+end\s+of\s+'
+            rf'(?P<terminus_street2>.+?)$',
+            re.IGNORECASE,
+        ),
+        street_and_further_metric=re.compile(
+            rf'^(?P<start_intersection>.+?)\s+and\s+a\s+point\s+{_APPROX}'
+            rf'(?P<distance>{_METRES})\s+metres\s+further\s+(?P<direction>{_COMPOUND_DIR})\s+of\s+'
+            rf'(?P<end_intersection>.+?)$',
+            re.IGNORECASE,
+        ),
         terminus_to_terminus=re.compile(
-            rf'^The (?P<terminus_start_dir>{_COMPASS_END}) end of (?P<terminus_street>.*?) '
-            rf'and the (?P<terminus_end_dir>{_COMPASS_END}) end of (?P<terminus_street2>.*?)$',
+            rf'^The (?P<terminus_start_dir>{_COMPASS_END}) end of '
+            rf'(?P<terminus_street>.+?{_OPT_PAREN_IN_ANCHOR}) '
+            rf'and (?:the\s+)?(?P<terminus_end_dir>{_COMPASS_END}) end of '
+            rf'(?P<terminus_street2>.+?{_OPT_PAREN_IN_ANCHOR})$',
             re.IGNORECASE,
         ),
         parenthetical_block=re.compile(
             r'^(?P<start_intersection>.*?)\s*\((?P<start_intersection_qualifier>[^)]+)\)\s*'
             r'and\s*(?P<end_intersection>.*?)$',
+            re.IGNORECASE,
+        ),
+        block_lane_tail=re.compile(
+            r'^(?P<start_intersection>.+?) and (?P<end_intersection>.+?), '
+            r'(?:(?:first|second|third)\s+)?'
+            rf'(?P<lane_direction>{_DIR})\s+of\s+'
+            r'(?P<lane_anchor>.+?)$',
             re.IGNORECASE,
         ),
         block=re.compile(
@@ -224,12 +301,76 @@ def preprocess_between(text: str) -> str:
     """Fix common spacing typos and delimiter wording before pattern matching."""
     out = str(text).strip()
     out = re.sub(r'^between\s+', '', out, flags=re.IGNORECASE)
+    out = re.sub(r'^from\s+a\s+point\b', 'a point', out, flags=re.IGNORECASE)
+    out = re.sub(
+        r'^adjacent\s+.+?\s+between\s+',
+        '',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = out.rstrip(' .')
+    out = re.sub(
+        rf'\b(north|south|east|west)-(north|south|east|west)\b',
+        r'\1\2',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(r'\bmetres\s+metres\b', 'metres', out, flags=re.IGNORECASE)
+    out = re.sub(
+        rf'\ba\s+point\s+of\s+({_METRES})\s+metres\b',
+        r'a point \1 metres',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        rf'\b({_METRES})m\s+({_COMPASS})\b',
+        r'\1 metres \2',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(r'\bthereof\s+thereof\b', 'thereof', out, flags=re.IGNORECASE)
+    out = re.sub(
+        r'\b(north|south|east|west),\s*(north|south|east|west)\b',
+        r'\1 and \2',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        r'\b(north|south|east|west)erly/(north|south|east|west)erly\b',
+        r'\1 and \2',
+        out,
+        flags=re.IGNORECASE,
+    )
     out = re.sub(r'(\d)(metres\b)', r'\1 \2', out, flags=re.IGNORECASE)
     out = re.sub(r'\bmetres(?=[a-z])', 'metres ', out, flags=re.IGNORECASE)
     out = re.sub(r'\bppposite\b', 'opposite', out, flags=re.IGNORECASE)
+    out = re.sub(r'\boposite\b', 'opposite', out, flags=re.IGNORECASE)
     out = re.sub(r'\booint\b', 'point', out, flags=re.IGNORECASE)
     out = re.sub(r'\bappoint\b', 'a point', out, flags=re.IGNORECASE)
     out = re.sub(r'\bnother\b', 'north', out, flags=re.IGNORECASE)
+    out = re.sub(r'\bnroth\b', 'north', out, flags=re.IGNORECASE)
+    out = re.sub(r'\beas\s+tof\b', 'east of', out, flags=re.IGNORECASE)
+    out = re.sub(r'\btherof\b', 'thereof', out, flags=re.IGNORECASE)
+    out = re.sub(r'\bmetes\b', 'metres', out, flags=re.IGNORECASE)
+    out = re.sub(
+        rf'\b({_METRES})\s+metre\s+({_DIR})\b',
+        r'\1 metres \2',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(r'\bmeters\b', 'metres', out, flags=re.IGNORECASE)
+    out = re.sub(
+        r'\band\s+a\s+(\d+(?:\.\d+)?)\s+metres\b',
+        r'and a point \1 metres',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        r'\band\s+a\s+point\s+(\d+(?:\.\d+)?)\s+(north|south|east|west)\s*$',
+        r'and a point \1 metres \2',
+        out,
+        flags=re.IGNORECASE,
+    )
     out = re.sub(r'\s+and\s*$', '', out, flags=re.IGNORECASE)
     out = re.sub(r'\band\s+and\b', 'and', out, flags=re.IGNORECASE)
     out = re.sub(
@@ -299,8 +440,9 @@ def _parse_metric_of_street(text: str) -> tuple[str, str, str] | None:
 
 def _primary_compass(direction: str) -> str:
     """First compass token when direction is compound (e.g. 'north and east' → 'north')."""
-    d = str(direction).strip().lower().split(' and ', 1)[0]
-    return _TERMINUS_DIR_MAP.get(d, d)
+    d = str(direction).strip().lower().split(' and ', 1)[0].strip()
+    token = d.split()[0] if d.split() else d
+    return _TERMINUS_DIR_MAP.get(token, token)
 
 
 _TERMINUS_DIR_MAP = {
@@ -308,13 +450,17 @@ _TERMINUS_DIR_MAP = {
     'southerly': 'south',
     'easterly': 'east',
     'westerly': 'west',
+    'northeasterly': 'northeast',
+    'northwesterly': 'northwest',
+    'southeasterly': 'southeast',
+    'southwesterly': 'southwest',
 }
 
 
 def _normalize_compass_fields(parsed: dict) -> dict:
     out = dict(parsed)
     for key in ('direction', 'dir1', 'dir2'):
-        if key in out and out[key] and ' and ' in str(out[key]).lower():
+        if key in out and out[key]:
             out[key] = _primary_compass(out[key])
     return out
 
@@ -389,6 +535,12 @@ def _upgrade_metric_parsed(parsed: dict) -> dict:
     return out
 
 
+_TERMINUS_ANCHOR_RE = re.compile(
+    rf'^the\s+(?:{_COMPASS_END})\s+end\s+of\s+(?P<street>.+)$',
+    re.IGNORECASE,
+)
+
+
 def normalize_anchor_phrase(text: str) -> str:
     """Reduce 'a point opposite the east limit of X' / similar to a street name."""
     raw = str(text).strip()
@@ -397,6 +549,9 @@ def normalize_anchor_phrase(text: str) -> str:
     metric = _parse_metric_of_street(raw)
     if metric:
         return metric[0]
+    m = _TERMINUS_ANCHOR_RE.match(raw)
+    if m:
+        return m.group('street').strip()
     m = _A_POINT_OPPOSITE_LIMIT_RE.match(raw)
     if m:
         return m.group('street').strip()
@@ -515,6 +670,114 @@ def _try_terminus_end_metric(text: str) -> dict | None:
     d['terminus_direction'] = _primary_compass(d.get('terminus_direction', ''))
     d['direction'] = _primary_compass(d.get('direction', ''))
     return {**d, 'rule_type': 'terminus_end_metric'}
+
+
+def _try_terminus_end_block(text: str) -> dict | None:
+    m = _P.terminus_end_block.match(text)
+    if not m:
+        return None
+    d = m.groupdict()
+    d['terminus_direction'] = _primary_compass(d.get('terminus_direction', ''))
+    return {**d, 'rule_type': 'block_to_terminus'}
+
+
+def _try_terminus_end_opposite(text: str) -> dict | None:
+    m = _P.terminus_end_opposite.match(text)
+    if not m:
+        return None
+    end = normalize_anchor_phrase(m.group('end_intersection') or '')
+    if not end:
+        return None
+    return {
+        'rule_type': 'block_to_terminus',
+        'terminus_direction': _primary_compass(m.group('terminus_direction') or ''),
+        'terminus_street': (m.group('terminus_street') or '').strip(),
+        'start_intersection': end,
+    }
+
+
+def _try_street_and_terminus_end(text: str) -> dict | None:
+    m = _P.street_and_terminus_end.match(text)
+    if not m:
+        return None
+    start = (m.group('start_intersection') or '').strip()
+    if not _block_side_ok(start):
+        return None
+    return {
+        'rule_type': 'block_to_terminus',
+        'start_intersection': start,
+        'terminus_direction': _primary_compass(m.group('terminus_direction') or ''),
+        'terminus_street': (m.group('terminus_street') or '').strip(),
+    }
+
+
+def _try_metric_and_opposite_limit(text: str) -> dict | None:
+    m = _P.metric_and_opposite_limit.match(text)
+    if not m:
+        return None
+    end = normalize_anchor_phrase(m.group('end_intersection') or '')
+    if not end:
+        return None
+    return {
+        'rule_type': 'offset_to_intersect',
+        'start_intersection': (m.group('start_intersection') or '').strip(),
+        'end_intersection': end,
+        'distance': m.group('distance'),
+        'direction': _primary_compass(m.group('direction') or ''),
+    }
+
+
+def _try_metric_and_metric_of(text: str) -> dict | None:
+    m = _P.metric_and_metric_of.match(text)
+    return _parsed(m, 'dual_anchor') if m else None
+
+
+def _try_terminus_end_and_offset(text: str) -> dict | None:
+    m = _P.terminus_end_and_offset.match(text)
+    if not m:
+        return None
+    anchor = normalize_anchor_phrase(m.group('offset_anchor') or '')
+    if not anchor:
+        return None
+    return {
+        'rule_type': 'block_to_terminus',
+        'terminus_direction': _primary_compass(m.group('terminus_direction') or ''),
+        'terminus_street': (m.group('terminus_street') or '').strip(),
+        'start_intersection': anchor,
+    }
+
+
+def _try_terminus_end_same_metric(text: str) -> dict | None:
+    m = _P.terminus_end_same_metric.match(text)
+    if not m:
+        return None
+    street = (m.group('terminus_street') or '').strip()
+    street2 = (m.group('terminus_street2') or '').strip()
+    if street.lower() != street2.lower():
+        return None
+    return {
+        'rule_type': 'terminus_end_metric',
+        'terminus_street': street,
+        'terminus_direction': _primary_compass(m.group('terminus_direction') or ''),
+        'distance': m.group('distance'),
+        'direction': _primary_compass(m.group('direction') or ''),
+    }
+
+
+def _try_street_and_further_metric(text: str) -> dict | None:
+    m = _P.street_and_further_metric.match(text)
+    if not m:
+        return None
+    start = (m.group('start_intersection') or '').strip()
+    if not _block_side_ok(start):
+        return None
+    return {
+        'rule_type': 'intersect_to_offset',
+        'start_intersection': start,
+        'offset_intersection': (m.group('end_intersection') or '').strip(),
+        'distance': m.group('distance'),
+        'direction': _primary_compass(m.group('direction') or ''),
+    }
 
 
 def _try_metric_and_street(text: str) -> dict | None:
@@ -642,9 +905,34 @@ def _try_block_to_terminus(text: str) -> dict | None:
 
 def _try_parenthetical_block(text: str) -> dict | None:
     m = _P.parenthetical_block.match(text)
-    if not m or not _block_side_ok(m.group('end_intersection')):
+    if not m:
         return None
-    return _parsed(m, 'parenthetical_block')
+    start = (m.group('start_intersection') or '').strip()
+    end = (m.group('end_intersection') or '').strip()
+    if _block_side_ok(start) and _block_side_ok(end):
+        return _parsed(m, 'parenthetical_block')
+    if _block_side_ok(start) and end.lower().startswith('a point opposite'):
+        end_street = normalize_anchor_phrase(end)
+        if not end_street:
+            return None
+        out = _parsed(m, 'parenthetical_block')
+        out['end_intersection'] = end_street
+        return out
+    return None
+
+
+def _try_block_lane_tail(text: str) -> dict | None:
+    """``X and Y, first north of Z`` — block endpoints before lane-position tail."""
+    if 'point' in text.lower() or 'metres' in text.lower():
+        return None
+    m = _P.block_lane_tail.match(text)
+    if not m:
+        return None
+    start = (m.group('start_intersection') or '').strip()
+    end = (m.group('end_intersection') or '').strip()
+    if not (_block_side_ok(start) and _block_side_ok(end)):
+        return None
+    return _parsed(m, 'block')
 
 
 def _try_block(text: str) -> dict | None:
@@ -678,13 +966,20 @@ def _try_entire_length(text: str) -> dict | None:
 # Order matters — first match wins.
 _RULE_HANDLERS: tuple[ParseFn, ...] = (
     _try_offset_span,
+    _try_metric_and_opposite_limit,
+    _try_metric_and_metric_of,
     _try_opposite_and_metric,
     _try_opposite_limit_block,
     _try_opposite_and_block,
     _try_street_and_opposite,
     _try_terminus_to_terminus,
     _try_terminus_end_metric,
+    _try_terminus_end_opposite,
+    _try_terminus_end_same_metric,
+    _try_terminus_end_and_offset,
+    _try_terminus_end_block,
     _try_block_to_terminus,
+    _try_street_and_terminus_end,
     _try_parenthetical_to_terminus,
     _try_parenthetical_end_block,
     _try_parenthetical_dual_block,
@@ -692,11 +987,13 @@ _RULE_HANDLERS: tuple[ParseFn, ...] = (
     _try_street_and_bare_metric,
     _try_perfect_offset,
     _try_intersect_to_offset,
+    _try_street_and_further_metric,
     _try_metric_and_street,
     _try_intersect_thereof,
     _try_dual_anchor,
     _try_offset_to_intersect,
     _try_parenthetical_block,
+    _try_block_lane_tail,
     _try_block,
     _try_intersect_extension,
     _try_entire_length,

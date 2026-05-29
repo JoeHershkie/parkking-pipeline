@@ -53,3 +53,29 @@ def test_context_disambiguate_fairfield_with_cardiff_cross(configured):
 def test_highway_lookup_ambiguous(configured):
     assert thr.highway_lookup_ambiguous('Fairfield Avenue') is True
     assert thr.highway_lookup_ambiguous('Beaumont Street') is False
+
+
+BOND_DUNCAIRN_ID = 13450942
+
+
+def test_resolve_pair_bond_avenue_duncairn_via_root_or_variant(configured):
+    """Bylaw Bond Avenue × Duncairn; TCL junction is bond park trl × duncairn."""
+    ids = ix.resolve_pair_ids('Bond Avenue', 'Duncairn Road')
+    assert list(ids) == [BOND_DUNCAIRN_ID]
+
+    match = ipr.resolve_pair_via_roots('Bond Avenue', 'Duncairn Road')
+    assert match is not None
+    assert match.intersection_id == BOND_DUNCAIRN_ID
+    assert match.street_a_token == 'bond park trail'
+    assert 'duncairn' in match.intersection_desc
+    assert 'bond park' in match.intersection_desc
+
+
+def test_resolve_pair_unique_legal_variant_bond(configured):
+    hit = ipr.resolve_pair_via_unique_legal_variant('Bond Avenue', 'Duncairn Road')
+    assert list(hit) == [BOND_DUNCAIRN_ID]
+
+
+def test_unique_remap_for_partner_bond_duncairn(configured):
+    partner = thr.resolve_tcl_highway('Duncairn Road')
+    assert thr._unique_remap_for_partner(partner, 'Bond Avenue') == 'bond park trail'

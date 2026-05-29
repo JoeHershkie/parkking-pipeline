@@ -333,6 +333,106 @@ def test_parse_abc_wave_patterns(between: str, rule_type: str) -> None:
     assert ok, err
 
 
+def test_parse_block_lane_tail_sibley_victoria_danforth() -> None:
+    between = (
+        'Sibley Avenue and Victoria Park Avenue, first north of Danforth Avenue'
+    )
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == 'block'
+    assert parsed['start_intersection'] == 'Sibley Avenue'
+    assert parsed['end_intersection'] == 'Victoria Park Avenue'
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+@pytest.mark.parametrize(
+    ('between', 'rule_type', 'checks'),
+    [
+        (
+            "The west end of Dora Avenue and St. Helen's Avenue",
+            'block_to_terminus',
+            {
+                'terminus_direction': 'west',
+                'terminus_street': 'Dora Avenue',
+                'start_intersection': "St. Helen's Avenue",
+            },
+        ),
+        (
+            'A point 37 metres east of Muirhead Road and a point opposite the '
+            'southerly limit of Endsleigh Crescent',
+            'offset_to_intersect',
+            {
+                'start_intersection': 'Muirhead Road',
+                'end_intersection': 'Endsleigh Crescent',
+                'distance': '37',
+                'direction': 'east',
+            },
+        ),
+        (
+            'Coxwell Avenue and northeast end of Robbins Avenue',
+            'block_to_terminus',
+            {
+                'start_intersection': 'Coxwell Avenue',
+                'terminus_direction': 'northeast',
+                'terminus_street': 'Robbins Avenue',
+            },
+        ),
+        (
+            'The south end of Flint Road and a point opposite the northerly '
+            'limit of Supertest Road',
+            'block_to_terminus',
+            {
+                'terminus_direction': 'south',
+                'terminus_street': 'Flint Road',
+                'start_intersection': 'Supertest Road',
+            },
+        ),
+        (
+            'A point 275 metres west northwest of Ambercroft Boulevard '
+            '(south intersection) and a point 85 metres further northwest',
+            'relative_extension',
+            {
+                'start_intersection': 'Ambercroft Boulevard',
+                'start_intersection_qualifier': 'south intersection',
+                'dist1': '275',
+                'dist2': '85',
+                'dir1': 'west',
+            },
+        ),
+        (
+            'Yorkminster Road (southwest intersection) and a point opposite the '
+            'southerly limit of Montressor Drive',
+            'parenthetical_block',
+            {
+                'start_intersection': 'Yorkminster Road',
+                'end_intersection': 'Montressor Drive',
+                'start_intersection_qualifier': 'southwest intersection',
+            },
+        ),
+        (
+            'The west end of Wallace Avenue and a point 48 metres west of '
+            'Symington Avenue',
+            'block_to_terminus',
+            {
+                'terminus_street': 'Wallace Avenue',
+                'start_intersection': 'Symington Avenue',
+            },
+        ),
+    ],
+)
+def test_parse_338_cohort_patterns(
+    between: str, rule_type: str, checks: dict,
+) -> None:
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == rule_type
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+    for key, val in checks.items():
+        assert parsed.get(key) == val, f'{key}: got {parsed.get(key)!r}'
+
+
 def test_parse_between_parenthetical_dual_block_not_dual_anchor() -> None:
     """Plain dual-qualified block must not match dual_anchor (metric offsets)."""
     between = (

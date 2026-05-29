@@ -528,9 +528,10 @@ def _resolved_partner_keys(crosses: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _unique_remap_for_partner(partner_key: str, street: str) -> str | None:
-    """Single base remap of *street* that intersects *partner_key*, if unique."""
+    """Single TCL legal for *street* that intersects *partner_key*, if unique."""
     try:
         import intersection_index as ix
+        from intersection_pair_resolve import _legal_variants_for_street
     except ImportError:
         return None
 
@@ -539,8 +540,9 @@ def _unique_remap_for_partner(partner_key: str, street: str) -> str | None:
         return resolved if resolved in _legal_keys else None
 
     hits = [
-        r for r in base_remap_candidates(street)
-        if ix.resolve_pair_ids_tokens(partner_key, r)
+        cand
+        for cand in _legal_variants_for_street(street)
+        if ix.resolve_pair_ids_tokens(partner_key, cand)
     ]
     if len(hits) == 1:
         return hits[0]
