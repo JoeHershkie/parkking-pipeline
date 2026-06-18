@@ -18,6 +18,13 @@ data/tcl_street_names.csv
 data/street_aliases.csv
 data/highway_aliases.csv
 data/.geo_cache/
+data/street_alias_suggestions.csv
+data/highway_resolution_audit.json
+data/intersection_failure_summary.json
+data/street_failure_summary.json
+data/normalizer_rule_evaluation.json
+data/phase_a_baseline_summary.json
+data/*.pdf
 
 # Legacy paths at repo root (pre-data/ layout)
 /tcl_streets.geojson
