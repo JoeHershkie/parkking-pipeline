@@ -13,7 +13,7 @@ from failure_ledger import (  # noqa: E402
     clear_stage,
     record_failure,
 )
-from parse_between import preprocess_between  # noqa: E402
+from bylaw_text import preprocess_between  # noqa: E402
 
 
 def test_record_failure_stores_between_parsed_input(tmp_path, monkeypatch) -> None:

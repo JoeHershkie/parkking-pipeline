@@ -12,10 +12,11 @@ from shapely.geometry import LineString
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
+import geo_indices as gi
 import geometry_engine as ge  # noqa: E402
 import tcl_graph as tg  # noqa: E402
-from geometry_engine import ZERO_SPAN, SliceResult  # noqa: E402
-from parse_format import row_to_parsed  # noqa: E402
+from geo_slice import ZERO_SPAN, SliceResult  # noqa: E402
+from parse_format import highway_from_row, row_to_parsed  # noqa: E402
 from paths import data_path  # noqa: E402
 
 
@@ -38,13 +39,13 @@ def geo_env():
     ix = gpd.read_file(data_path('tcl_intersections.geojson'))
     st = gpd.read_file(data_path('tcl_streets.geojson'))
     tg.configure_intersections(ix)
-    ge.street_graphs = tg.build_street_graphs(st)
-    ge.street_index = ge._build_street_index(st)
-    ge.intersections_gdf = ix
+    gi.street_graphs = tg.build_street_graphs(st)
+    gi.street_index = gi._build_street_index(st)
+    gi.intersections_gdf = ix
     import tcl_highway_resolve as thr
 
-    thr.build_index(legal_keys=set(ge.street_index.keys()), base_to_legals={})
-    return ge
+    thr.build_index(legal_keys=set(gi.street_index.keys()), base_to_legals={})
+    return gi
 
 
 def test_offset_to_intersect_heath_glen_recovers(geo_env) -> None:
@@ -61,7 +62,7 @@ def test_offset_to_intersect_heath_glen_recovers(geo_env) -> None:
         pytest.skip('Heath/Glen ZERO_SPAN row not in ledger')
     r = row[row['_id'].astype(str) == str(match.iloc[0]['row_id'])].iloc[0]
     parsed = row_to_parsed(r)
-    result = ge.slice_street(ge.highway_from_row(r), parsed, bylaw_highway=r['Highway'])
+    result = ge.slice_street(highway_from_row(r), parsed, bylaw_highway=r['Highway'])
     assert result.reason_code is None, result.detail
     assert result.geometry is not None
     assert not result.geometry.is_empty

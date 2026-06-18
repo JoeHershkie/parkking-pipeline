@@ -39,7 +39,10 @@ NORM_COLUMNS = [
 
 META_COLUMNS = ['parse_valid', 'parse_error']
 
+RESOLVE_COLUMNS = ['highway_resolved', 'resolve_valid', 'resolve_error']
+
 EXPORT_PARSE_COLUMNS = PARSE_COLUMNS + NORM_COLUMNS + META_COLUMNS
+EXPORT_RESOLVE_COLUMNS = EXPORT_PARSE_COLUMNS + RESOLVE_COLUMNS
 
 _FLOAT_KEYS = frozenset({'distance', 'dist1', 'dist2'})
 _COMPASS_DIRS = frozenset({
@@ -116,6 +119,14 @@ def _is_empty(val) -> bool:
 
 
 def _parse_valid_flag(val) -> bool:
+    if _is_empty(val):
+        return True
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ('true', '1', 'yes')
+
+
+def _resolve_valid_flag(val) -> bool:
     if _is_empty(val):
         return True
     if isinstance(val, bool):
@@ -330,12 +341,44 @@ def row_to_parsed(row) -> dict:
     return parsed
 
 
+def resolve_columns_for_row(row, parsed: dict) -> dict:
+    """Resolve TCL highway key and refresh norm columns for a parsed row."""
+    from lane_highway_resolve import lookup_highway_key
+    import tcl_highway_resolve as thr
+
+    highway = str(_row_get(row, 'Highway') or '')
+    between = str(_row_get(row, 'Between') or '')
+    resolved = lookup_highway_key(highway, between, parsed or None)
+    thr._ensure_index()
+    legal = getattr(thr, '_legal_keys', frozenset())
+
+    out = norm_columns_for_row(parsed, highway)
+    if resolved and resolved in legal:
+        out['highway_resolved'] = resolved
+        out['resolve_valid'] = True
+        out['resolve_error'] = ''
+    else:
+        out['highway_resolved'] = resolved or ''
+        out['resolve_valid'] = False
+        detail = resolved or highway
+        out['resolve_error'] = f'highway not in TCL index: {detail}'
+    return out
+
+
 def highway_from_row(row) -> str:
     """Highway key for TCL centreline lookup (``LINEAR_NAME_FULL_LEGAL``, lowercased).
 
-    Applies ``tcl_lookup_key``, lane inference, and cross-street disambiguation.
-    Does not use ``highway_norm`` — that column abbreviates types for INTERSECTION_DESC search.
+    Prefers ``highway_resolved`` when ``resolve_valid`` is true; otherwise runs live lookup.
     """
+    if (
+        _row_has(row, 'highway_resolved')
+        and _row_has(row, 'resolve_valid')
+        and _resolve_valid_flag(_row_get(row, 'resolve_valid'))
+    ):
+        resolved = str(_row_get(row, 'highway_resolved') or '').strip()
+        if resolved:
+            return resolved
+
     from lane_highway_resolve import lookup_highway_key
 
     highway = str(_row_get(row, 'Highway') or '')

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
 import geometry_engine as ge  # noqa: E402
+from geo_indices import init_geo  # noqa: E402
 from parse_format import PARSE_COLUMNS, row_to_parsed  # noqa: E402
 from paths import data_path  # noqa: E402
 
@@ -488,6 +489,7 @@ def _print_exemplars(df: pd.DataFrame, cause: str, n: int = 5) -> None:
 
 
 def main() -> None:
+    init_geo()
     fl = pd.read_csv(data_path('failure_ledger.csv'))
     geo = fl[(fl['stage'] == 'geo') & (fl['reason_code'] == 'GEOMETRY_ERROR')].copy()
 

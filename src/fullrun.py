@@ -36,6 +36,7 @@ def main() -> int:
         ROOT / 'clean_data.py',
         ROOT / 'parse_between.py',
         ROOT / 'parse_schedule.py',
+        ROOT / 'resolve_rows.py',
         ROOT / 'geometry_engine.py',
     ]
     analysis = [

@@ -9,74 +9,52 @@ from typing import Callable
 
 import pandas as pd
 
+from between_patterns import (
+    A_POINT_RE,
+    APPROX as _APPROX,
+    COMPASS as _COMPASS,
+    COMPASS_END as _COMPASS_END,
+    COMPOUND_DIR as _COMPOUND_DIR,
+    DIR as _DIR,
+    FURTHER_TAIL as _FURTHER_TAIL,
+    METRES as _METRES,
+    OPT_PAREN_IN_ANCHOR as _OPT_PAREN_IN_ANCHOR,
+    PAREN_QUALIFIER_RE,
+    POINT_METRES_FRAGMENT_RE,
+    STREET_END_RE,
+)
+from bylaw_text import preprocess_between
 from failure_ledger import clear_stage, record_failure
 from parse_format import (
     EXPORT_PARSE_COLUMNS,
-    apply_trailing_qualifiers,
     norm_columns_for_row,
     parsed_dict_to_columns,
     validate_parsed,
 )
 from paths import data_path
+from parse_normalize import (
+    normalize_anchor_phrase,
+    normalize_parsed,
+    primary_compass as _primary_compass,
+)
 from schedule_format import SCHEDULE_EXPORT_COLUMNS
+
+__all__ = (
+    'PARSE_NO_MATCH',
+    'PARSE_EMPTY_BETWEEN',
+    'PARSE_INVALID',
+    'preprocess_between',
+    'normalize_anchor_phrase',
+    'normalize_parsed',
+    'parse_between',
+    'parse_rows',
+)
 
 # --- Failure reason codes (parse stage) ---
 
 PARSE_NO_MATCH = 'PARSE_NO_MATCH'
 PARSE_EMPTY_BETWEEN = 'PARSE_EMPTY_BETWEEN'
 PARSE_INVALID = 'PARSE_INVALID'
-
-# --- Shared pattern fragments ---
-
-_COMPASS = r'north|south|east|west|northeast|northwest|southeast|southwest'
-_COMPASS_END = (
-    r'north|south|east|west|northeast|northwest|southeast|southwest'
-    r'|northerly|southerly|easterly|westerly'
-)
-_APPROX = r'(?:approximately )?'
-_METRES = r'\d+(?:\.\d+)?'
-_DIR = r'north|south|east|west'
-_COMPOUND_DIR = (
-    rf'(?:{_COMPASS})(?:\s+and\s+(?:{_COMPASS})|\s+(?:{_COMPASS}))?'
-)
-# Optional parenthetical qualifier after anchor (captured with street for qualifier split).
-_OPT_PAREN_IN_ANCHOR = r'(?:\s*\([^)]+\))?'
-
-_FURTHER_TAIL = (
-    rf'(?:further {_COMPOUND_DIR}(?:\s+thereof)?'
-    rf'|{_COMPOUND_DIR} thereof)'
-)
-
-_STREET_END_RE = re.compile(rf'\b(?:{_COMPASS_END})\s+end\s+of\b', re.IGNORECASE)
-_PAREN_QUALIFIER_RE = re.compile(r'\([^)]*intersection[^)]*\)', re.IGNORECASE)
-_A_POINT_RE = re.compile(r'^a point\b', re.IGNORECASE)
-_POINT_METRES_FRAGMENT_RE = re.compile(r'^a point\s+.*\bmetres\b', re.IGNORECASE)
-_METRIC_OF_STREET_RE = re.compile(
-    rf'^a\s+point\s+{_APPROX}(?P<distance>{_METRES})\s+metres\s+'
-    rf'(?P<direction>{_COMPOUND_DIR})\s+of\s+'
-    rf'(?P<street>.+)$',
-    re.IGNORECASE,
-)
-_METRIC_ONLY_RE = re.compile(
-    rf'^a\s+point\s+{_APPROX}(?P<distance>{_METRES})\s+metres\s+'
-    rf'(?P<direction>{_COMPOUND_DIR})\s*$',
-    re.IGNORECASE,
-)
-_A_POINT_OPPOSITE_LIMIT_RE = re.compile(
-    r'^a\s+point\s+opposite\s+the\s+.+?\blimit\s+of\s+(?P<street>.+)$',
-    re.IGNORECASE,
-)
-_A_POINT_OPPOSITE_RE = re.compile(r'^a\s+point\s+opposite\s+(?P<street>.+)$', re.IGNORECASE)
-_THE_LIMIT_RE = re.compile(r'^the\s+.+?\blimit\s+of\s+(?P<street>.+)$', re.IGNORECASE)
-_SCHEDULE_IN_BETWEEN_RE = re.compile(r'\d{1,2}:\d{2}\s*[ap]\.m\.', re.IGNORECASE)
-_ADJACENT_TO_RE = re.compile(r'^Adjacent\s+to\b', re.IGNORECASE)
-
-_ANCHOR_FIELDS = frozenset({
-    'start_intersection',
-    'end_intersection',
-    'offset_intersection',
-})
-
 
 @dataclass(frozen=True)
 class _Patterns:
@@ -297,301 +275,16 @@ _P = _compile_patterns()
 ParseFn = Callable[[str], dict | None]
 
 
-def preprocess_between(text: str) -> str:
-    """Fix common spacing typos and delimiter wording before pattern matching."""
-    out = str(text).strip()
-    out = re.sub(r'^between\s+', '', out, flags=re.IGNORECASE)
-    out = re.sub(r'^from\s+a\s+point\b', 'a point', out, flags=re.IGNORECASE)
-    out = re.sub(
-        r'^adjacent\s+.+?\s+between\s+',
-        '',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = out.rstrip(' .')
-    out = re.sub(
-        rf'\b(north|south|east|west)-(north|south|east|west)\b',
-        r'\1\2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'\bmetres\s+metres\b', 'metres', out, flags=re.IGNORECASE)
-    out = re.sub(
-        rf'\ba\s+point\s+of\s+({_METRES})\s+metres\b',
-        r'a point \1 metres',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        rf'\b({_METRES})m\s+({_COMPASS})\b',
-        r'\1 metres \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'\bthereof\s+thereof\b', 'thereof', out, flags=re.IGNORECASE)
-    out = re.sub(
-        r'\b(north|south|east|west),\s*(north|south|east|west)\b',
-        r'\1 and \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        r'\b(north|south|east|west)erly/(north|south|east|west)erly\b',
-        r'\1 and \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'(\d)(metres\b)', r'\1 \2', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bmetres(?=[a-z])', 'metres ', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bppposite\b', 'opposite', out, flags=re.IGNORECASE)
-    out = re.sub(r'\boposite\b', 'opposite', out, flags=re.IGNORECASE)
-    out = re.sub(r'\booint\b', 'point', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bappoint\b', 'a point', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bnother\b', 'north', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bnroth\b', 'north', out, flags=re.IGNORECASE)
-    out = re.sub(r'\beas\s+tof\b', 'east of', out, flags=re.IGNORECASE)
-    out = re.sub(r'\btherof\b', 'thereof', out, flags=re.IGNORECASE)
-    out = re.sub(r'\bmetes\b', 'metres', out, flags=re.IGNORECASE)
-    out = re.sub(
-        rf'\b({_METRES})\s+metre\s+({_DIR})\b',
-        r'\1 metres \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'\bmeters\b', 'metres', out, flags=re.IGNORECASE)
-    out = re.sub(
-        r'\band\s+a\s+(\d+(?:\.\d+)?)\s+metres\b',
-        r'and a point \1 metres',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        r'\band\s+a\s+point\s+(\d+(?:\.\d+)?)\s+(north|south|east|west)\s*$',
-        r'and a point \1 metres \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'\s+and\s*$', '', out, flags=re.IGNORECASE)
-    out = re.sub(r'\band\s+and\b', 'and', out, flags=re.IGNORECASE)
-    out = re.sub(
-        r'\((west|east|north|south)\s+intersection(?!\))',
-        r'(\1 intersection)',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        r'\)\s+(added|on the inside perimeter|to)\s*$',
-        ')',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(r'\beaster\s+thereof\b', 'east thereof', out, flags=re.IGNORECASE)
-    out = re.sub(r'\ba point\s+a point\b', 'a point', out, flags=re.IGNORECASE)
-    out = re.sub(r'\band point (\d)', r'and a point \1', out, flags=re.IGNORECASE)
-    out = re.sub(r'^point (\d)', r'a point \1', out, flags=re.IGNORECASE)
-    out = re.sub(
-        rf'\b({_METRES})\s+(?!metres\b)({_COMPASS})\s+of\b',
-        r'\1 metres \2 of',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        rf'\b(south|north|east|west)/(south|north|east|west)\b',
-        r'\1 and \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    out = re.sub(
-        rf'\bmetres\s+({_COMPOUND_DIR})\s+(?!of\b)((?-i:[A-Z])[A-Za-z\'.,-]*)',
-        r'metres \1 of \2',
-        out,
-        flags=re.IGNORECASE,
-    )
-    if not re.search(
-        rf'\bmetres\s+(?:south|north)\s+and\s+(?-i:[A-Z])'
-        rf'(?:[A-Za-z\'.,-]+\s+)*'
-        r'(?:street|st|avenue|ave|road|rd|drive|dr|boulevard|blvd|crescent|cres|court|ct|way|gate|grove|lane|ln)\b',
-        out,
-        flags=re.IGNORECASE,
-    ):
-        out = re.sub(
-            rf'\bmetres\s+(south|north)\s+and\s+((?-i:[A-Z])[A-Za-z\'.,-]*)',
-            r'metres \1 and east of \2',
-            out,
-            flags=re.IGNORECASE,
-        )
-    if not _SCHEDULE_IN_BETWEEN_RE.search(out) and not _ADJACENT_TO_RE.match(out):
-        out = re.sub(r'\s+to\s+', ' and ', out, flags=re.IGNORECASE)
-    return out.strip()
-
-
 def _parsed(match: re.Match, rule_type: str, **extra: str) -> dict:
     return {**match.groupdict(), **extra, 'rule_type': rule_type}
 
 
-def _parse_metric_of_street(text: str) -> tuple[str, str, str] | None:
-    """Return (street, distance, direction) from 'a point N metres DIR of Street'."""
-    m = _METRIC_OF_STREET_RE.match(str(text).strip())
-    if not m:
-        return None
-    direction = m.group('direction').lower().split(' and ', 1)[0]
-    return m.group('street').strip(), m.group('distance'), direction
-
-
-def _primary_compass(direction: str) -> str:
-    """First compass token when direction is compound (e.g. 'north and east' → 'north')."""
-    d = str(direction).strip().lower().split(' and ', 1)[0].strip()
-    token = d.split()[0] if d.split() else d
-    return _TERMINUS_DIR_MAP.get(token, token)
-
-
-_TERMINUS_DIR_MAP = {
-    'northerly': 'north',
-    'southerly': 'south',
-    'easterly': 'east',
-    'westerly': 'west',
-    'northeasterly': 'northeast',
-    'northwesterly': 'northwest',
-    'southeasterly': 'southeast',
-    'southwesterly': 'southwest',
-}
-
-
-def _normalize_compass_fields(parsed: dict) -> dict:
-    out = dict(parsed)
-    for key in ('direction', 'dir1', 'dir2'):
-        if key in out and out[key]:
-            out[key] = _primary_compass(out[key])
-    return out
-
-
-def _parse_metric_only(text: str) -> tuple[str, str] | None:
-    """Return (distance, direction) from 'a point N metres DIR' with no cross-street."""
-    m = _METRIC_ONLY_RE.match(str(text).strip())
-    if not m:
-        return None
-    direction = m.group('direction').lower().split(' and ', 1)[0]
-    return m.group('distance'), direction
-
-
-def _upgrade_metric_parsed(parsed: dict) -> dict:
-    """Remap block-family parses that captured metric point phrases as intersections."""
-    out = dict(parsed)
-    rule = out.get('rule_type')
-
-    if rule == 'parenthetical_block':
-        metric = _parse_metric_of_street(out.get('start_intersection', ''))
-        if metric:
-            street, dist, direction = metric
-            out['rule_type'] = 'offset_to_intersect'
-            out['start_intersection'] = street
-            out['distance'] = dist
-            out['direction'] = direction
-            return out
-
-    if rule == 'parenthetical_end_block':
-        end = out.get('end_intersection', '')
-        metric = _parse_metric_of_street(end)
-        if metric:
-            street, dist, direction = metric
-            out['rule_type'] = 'intersect_to_offset'
-            out['offset_intersection'] = street
-            out['distance'] = dist
-            out['direction'] = direction
-            out.pop('end_intersection', None)
-            qual = out.pop('end_intersection_qualifier', None)
-            if qual:
-                out['offset_intersection_qualifier'] = qual
-            return out
-        bare = _parse_metric_only(end)
-        if bare:
-            dist, direction = bare
-            out['rule_type'] = 'perfect_offset'
-            out['distance'] = dist
-            out['direction'] = direction
-            out.pop('end_intersection', None)
-            out.pop('end_intersection_qualifier', None)
-            return out
-
-    if rule == 'block_to_terminus':
-        start = out.get('start_intersection', '')
-        metric = _parse_metric_of_street(start)
-        if metric:
-            street, dist, direction = metric
-            out['start_intersection'] = street
-            out['distance'] = dist
-            out['direction'] = direction
-            return out
-        bare = _parse_metric_only(start)
-        if bare:
-            dist, direction = bare
-            term = str(out.get('terminus_street') or '').strip()
-            if term:
-                out['start_intersection'] = term
-            out['distance'] = dist
-            out['direction'] = direction
-            return out
-
-    return out
-
-
-_TERMINUS_ANCHOR_RE = re.compile(
-    rf'^the\s+(?:{_COMPASS_END})\s+end\s+of\s+(?P<street>.+)$',
-    re.IGNORECASE,
-)
-
-
-def normalize_anchor_phrase(text: str) -> str:
-    """Reduce 'a point opposite the east limit of X' / similar to a street name."""
-    raw = str(text).strip()
-    if not raw:
-        return raw
-    metric = _parse_metric_of_street(raw)
-    if metric:
-        return metric[0]
-    m = _TERMINUS_ANCHOR_RE.match(raw)
-    if m:
-        return m.group('street').strip()
-    m = _A_POINT_OPPOSITE_LIMIT_RE.match(raw)
-    if m:
-        return m.group('street').strip()
-    m = _A_POINT_OPPOSITE_RE.match(raw)
-    if m:
-        return m.group('street').strip()
-    m = _THE_LIMIT_RE.match(raw)
-    if m:
-        return m.group('street').strip()
-    return raw
-
-
-def _strip_trailing_and_from_anchors(parsed: dict) -> dict:
-    out = dict(parsed)
-    for key in _ANCHOR_FIELDS:
-        if key in out and out[key]:
-            out[key] = re.sub(r'\s+and\s*$', '', str(out[key]), flags=re.IGNORECASE).strip()
-    return out
-
-
-def normalize_parsed(parsed: dict) -> dict:
-    """Normalize anchor fields on a successful parse."""
-    out = apply_trailing_qualifiers(dict(parsed))
-    out = _strip_trailing_and_from_anchors(out)
-    out = _upgrade_metric_parsed(out)
-    out = _normalize_compass_fields(out)
-    if out.get('terminus_direction'):
-        out['terminus_direction'] = _primary_compass(out['terminus_direction'])
-    for key in _ANCHOR_FIELDS:
-        if key in out and out[key]:
-            out[key] = normalize_anchor_phrase(out[key])
-    return out
-
-
 def _starts_with_a_point(text: str) -> bool:
-    return bool(_A_POINT_RE.match(text.strip()))
+    return bool(A_POINT_RE.match(text.strip()))
 
 
 def _is_street_end_phrase(text: str) -> bool:
-    return bool(_STREET_END_RE.search(text))
+    return bool(STREET_END_RE.search(text))
 
 
 def _block_side_ok(side: str) -> bool:
@@ -600,7 +293,7 @@ def _block_side_ok(side: str) -> bool:
         return False
     if _is_street_end_phrase(side):
         return False
-    if _PAREN_QUALIFIER_RE.search(side):
+    if PAREN_QUALIFIER_RE.search(side):
         return False
     if _starts_with_a_point(side):
         return False
@@ -804,7 +497,7 @@ def _try_street_and_bare_metric(text: str) -> dict | None:
     if not m:
         return None
     start = (m.group('start_intersection') or '').strip()
-    if _POINT_METRES_FRAGMENT_RE.match(start):
+    if POINT_METRES_FRAGMENT_RE.match(start):
         return None
     return _parsed(m, 'perfect_offset')
 
@@ -814,7 +507,7 @@ def _try_perfect_offset(text: str) -> dict | None:
     if not m:
         return None
     start = (m.group('start_intersection') or '').strip()
-    if _POINT_METRES_FRAGMENT_RE.match(start):
+    if POINT_METRES_FRAGMENT_RE.match(start):
         return None
     return _parsed(m, 'perfect_offset')
 
@@ -953,7 +646,7 @@ def _try_intersect_extension(text: str) -> dict | None:
     if not m:
         return None
     start = (m.group('start_intersection') or '').strip()
-    if _POINT_METRES_FRAGMENT_RE.match(start):
+    if POINT_METRES_FRAGMENT_RE.match(start):
         return None
     return _parsed(m, 'intersect_extension')
 

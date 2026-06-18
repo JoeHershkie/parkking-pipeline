@@ -28,6 +28,7 @@ flowchart LR
   parseSched[src/parse_schedule.py]
   schedules[data/parsed_schedules.csv]
   parse[src/parse_between.py]
+  resolve[src/resolve_rows.py]
   success[data/parsed_successes.csv]
   ledger[data/failure_ledger.csv]
   geo[src/geometry_engine.py]
@@ -41,10 +42,12 @@ flowchart LR
   targets --> parse
   schedules --> parse
   parse --> success
+  success --> resolve
+  resolve --> geo
   clean --> ledger
   parseSched --> ledger
   parse --> ledger
-  success --> geo
+  resolve --> ledger
   tclStreets --> geo
   tclX --> geo
   geo --> ledger
@@ -66,6 +69,7 @@ pip install -r requirements.txt
 python src/clean_data.py
 python src/parse_schedule.py
 python src/parse_between.py
+python src/resolve_rows.py
 python src/geometry_engine.py
 # Quick sample (10 rows): GEO_LIMIT=10 python src/geometry_engine.py
 # Parallel batch: GEO_WORKERS=4 python src/geometry_engine.py
@@ -82,6 +86,7 @@ Scripts resolve paths via [`src/paths.py`](../src/paths.py) (`data/` is always r
 | [`src/clean_data.py`](../src/clean_data.py) | 1 — Filter & unpack | `data/toronto_raw_parking_dump.csv` → `data/clean_parking_targets.csv` |
 | [`src/parse_schedule.py`](../src/parse_schedule.py) | 1b — Parse times | `data/clean_parking_targets.csv` → `data/parsed_schedules.csv` |
 | [`src/parse_between.py`](../src/parse_between.py) | 2 — Parse `Between` | `data/clean_parking_targets.csv` + `data/parsed_schedules.csv` → `data/parsed_successes.csv` |
+| [`src/resolve_rows.py`](../src/resolve_rows.py) | 2.5 — Resolve `Highway` | `data/parsed_successes.csv` → same file (+ `highway_resolved`, `*_norm` refresh) |
 | [`src/geometry_engine.py`](../src/geometry_engine.py) | 3 — Geocode | `data/parsed_successes.csv` + TCL GeoJSON → `data/final_parking_map.geojson` |
 
 ## Data files
@@ -95,7 +100,7 @@ Scripts resolve paths via [`src/paths.py`](../src/paths.py) (`data/` is always r
 | `data/tcl_streets.geojson` | **Source** | Toronto Centreline street segments (`LINEAR_NAME_FULL_LEGAL`) |
 | `data/tcl_intersections.geojson` | **Source** | Intersection points (`INTERSECTION_DESC`) |
 | `data/final_parking_map.geojson` | Generated | Map-ready features: `Highway`, `Rule`, `schedule_category`, `Side`, `max`, `schedule`, `maxMinutes`, `geometry` |
-| `data/failure_ledger.csv` | Generated | Row-level pipeline failures from `clean`, `schedule`, `parse`, and `geo` (`stage`, `reason_code`, `detail`, …). Join to clean targets or raw dump on `row_id` / `_id`. |
+| `data/failure_ledger.csv` | Generated | Row-level pipeline failures from `clean`, `schedule`, `parse`, `resolve`, and `geo` (`stage`, `reason_code`, `detail`, …). Join to clean targets or raw dump on `row_id` / `_id`. |
 
 ### `clean_parking_targets.csv` schema
 
@@ -188,6 +193,11 @@ Run after `clean_data.py`. `Between` text is matched against ordered patterns in
 | `start_intersection_norm`, `end_intersection_norm`, `offset_intersection_norm`, `terminus_street_norm` | string | Normalized anchors for intersection matching |
 | `parse_valid` | bool | Always `true` in this file — invalid pattern matches go to `failure_ledger` |
 | `parse_error` | string | Empty when `parse_valid` is true |
+| `highway_resolved` | string | TCL `LINEAR_NAME_FULL_LEGAL` key (lowercased); set by [`resolve_rows.py`](../src/resolve_rows.py) |
+| `resolve_valid` | bool | `true` when `highway_resolved` is in the TCL index |
+| `resolve_error` | string | Empty when `resolve_valid` is true |
+
+Lexical cleanup lives in [`src/bylaw_text.py`](../src/bylaw_text.py); post-parse field normalization in [`src/parse_normalize.py`](../src/parse_normalize.py).
 
 | `rule_type` | Example pattern |
 |-------------|-----------------|
@@ -209,11 +219,15 @@ Run after `clean_data.py`. `Between` text is matched against ordered patterns in
 
 Unmatched rows are recorded in `failure_ledger.csv` with `stage=parse` (not written to `parsed_successes.csv`). Join back to `clean_parking_targets.csv` on `_id` = `row_id` to inspect full row context.
 
+## Resolve (`resolve_rows.py`)
+
+Run after `parse_between.py`. Maps bylaw `Highway` values to TCL centreline keys via [`tcl_highway_resolve.py`](../src/tcl_highway_resolve.py) and [`lane_highway_resolve.py`](../src/lane_highway_resolve.py). Refreshes `*_norm` columns. Rows with `resolve_valid=false` are recorded in `failure_ledger.csv` with `stage=resolve` and skipped by geometry.
+
 ## Geometry (`geometry_engine.py`)
 
-Uses local TCL data only:
+Uses local TCL data only (via [`geo_indices.py`](../src/geo_indices.py) and [`geo_slice.py`](../src/geo_slice.py)):
 
-- Streets: exact match on `LINEAR_NAME_FULL_LEGAL` (lowercased `Highway`)
+- Streets: `highway_resolved` from resolve stage (fallback: live lookup in `parse_format.highway_from_row`)
 - Intersections: substring match on `INTERSECTION_DESC` via [`src/intersection_normalize.py`](../src/intersection_normalize.py) (word-boundary abbreviations, optional [`data/street_aliases.csv`](../data/street_aliases.csv))
 
 ### Centreline model (nodes + edges)
@@ -257,6 +271,7 @@ Pipeline stages append failures to `data/failure_ledger.csv` via `failure_ledger
 | `parse` | `PARSE_NO_MATCH` | No ordered pattern matched `Between` |
 | `parse` | `PARSE_EMPTY_BETWEEN` | `Between` is empty or missing |
 | `parse` | `PARSE_INVALID` | Pattern matched but failed per-`rule_type` validation |
+| `resolve` | `RESOLVE_STREET_NOT_FOUND` | `Highway` could not be mapped to a TCL legal key |
 | `geo` | *(see table above)* | Geometry batch loop in `geometry_engine.py` `__main__` |
 | `geo` | `ZERO_SPAN` | No line geometry to emit; row stays in `parsed_successes.csv` only |
 

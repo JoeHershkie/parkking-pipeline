@@ -11,5 +11,6 @@ pip install -r requirements.txt
 python src/clean_data.py
 python src/parse_schedule.py
 python src/parse_between.py
+python src/resolve_rows.py
 python src/geometry_engine.py
 ```

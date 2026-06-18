@@ -97,6 +97,17 @@ def test_norm_columns_and_row_to_parsed_prefers_norm() -> None:
     assert highway_from_row(row) == 'spadina avenue'
 
 
+def test_highway_from_row_uses_resolved_column() -> None:
+    row = {
+        'Highway': 'Wrong Name Street',
+        'Between': 'Entire length',
+        'highway_resolved': 'spadina avenue',
+        'resolve_valid': True,
+        'rule_type': 'entire_length',
+    }
+    assert highway_from_row(row) == 'spadina avenue'
+
+
 @pytest.mark.parametrize(
     ('rule_type', 'parsed_extra', 'should_pass'),
     [

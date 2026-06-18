@@ -14,9 +14,10 @@ from shapely.ops import transform
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
+import geo_indices as gi
 import geometry_engine as ge
 import tcl_graph as tg
-from parse_format import row_to_parsed
+from parse_format import highway_from_row, row_to_parsed
 from paths import data_path
 
 # Synthetic line: high easting at param 0 (Leslie mouth), low easting at param 1 (west tip).
@@ -43,9 +44,9 @@ def street_graphs():
     st = gpd.read_file(data_path('tcl_streets.geojson'))
     tg.configure_intersections(ix)
     graphs = tg.build_street_graphs(st)
-    ge.street_graphs = graphs
-    ge.street_index = ge._build_street_index(st)
-    ge.intersections_gdf = ix
+    gi.street_graphs = graphs
+    gi.street_index = gi._build_street_index(st)
+    gi.intersections_gdf = ix
     return graphs
 
 
@@ -55,7 +56,7 @@ def test_equestrian_court_leslie_to_west_end(street_graphs) -> None:
 
     import tcl_highway_resolve as thr
 
-    thr.build_index(legal_keys=set(ge.street_index.keys()), base_to_legals={})
+    thr.build_index(legal_keys=set(gi.street_index.keys()), base_to_legals={})
 
     row = pd.read_csv(data_path('parsed_successes.csv'))
     match = row[row['_id'] == 10241]
@@ -63,7 +64,7 @@ def test_equestrian_court_leslie_to_west_end(street_graphs) -> None:
         pytest.skip('row 10241 not in parsed_successes.csv')
     r = match.iloc[0]
     parsed = row_to_parsed(r)
-    highway = ge.highway_from_row(r)
+    highway = highway_from_row(r)
 
     result = ge.slice_block_to_terminus_path(
         highway,

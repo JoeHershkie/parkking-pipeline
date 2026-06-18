@@ -15,11 +15,12 @@ from parse_format import row_to_parsed  # noqa: E402
 pytest.importorskip('geopandas')
 
 import geometry_engine as ge  # noqa: E402
+from geo_indices import init_geo  # noqa: E402
 
 
 @pytest.fixture(scope='module', autouse=True)
 def _geo_indexes():
-    assert ge.street_graphs, 'geometry_engine indexes must be loaded'
+    init_geo()
     yield
 
 
