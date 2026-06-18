@@ -45,7 +45,7 @@ export const lineColorExpression: ExpressionSpecification = [
   DEFAULT_LINE_COLOR,
 ]
 
-export const lineOpacityExpression: ExpressionSpecification = 0.85
+export const lineOpacityExpression: ExpressionSpecification = ['literal', 0.85]
 
 export const lineWidthExpression: ExpressionSpecification = [
   'case',
