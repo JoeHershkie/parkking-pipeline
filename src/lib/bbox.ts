@@ -1,4 +1,4 @@
-import type { ParkingFeature, ParkingFeatureCollection } from '../types/parking'
+import type { ParkingFeature } from '../types/parking'
 
 export type LngLatBounds = [[number, number], [number, number]]
 
@@ -27,13 +27,3 @@ export function boundsFromFeatures(
   ]
 }
 
-export function filterFeaturesByHighway(
-  data: ParkingFeatureCollection,
-  query: string,
-): ParkingFeature[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return []
-  return data.features.filter((f) =>
-    f.properties.Highway.toLowerCase().includes(q),
-  )
-}

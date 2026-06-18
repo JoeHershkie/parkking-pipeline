@@ -1,16 +1,12 @@
-import { useId } from 'react'
-import { formatSlotLabel, slotFromDate, type Slot } from '../lib/schedule'
+import { useId, useState } from 'react'
+import {
+  formatSlotLabel,
+  slotFromDate,
+  slotFromDateString,
+  slotToDateString,
+  type Slot,
+} from '../lib/schedule'
 import './TimeFilterBar.css'
-
-const DAY_OPTIONS = [
-  { value: 0, label: 'Sunday' },
-  { value: 1, label: 'Monday' },
-  { value: 2, label: 'Tuesday' },
-  { value: 3, label: 'Wednesday' },
-  { value: 4, label: 'Thursday' },
-  { value: 5, label: 'Friday' },
-  { value: 6, label: 'Saturday' },
-] as const
 
 function minuteToTimeValue(minute: number): string {
   const h = Math.floor(minute / 60)
@@ -25,11 +21,13 @@ function timeValueToMinute(value: string): number {
 
 export interface TimeFilterState {
   slot: Slot
+  endMinuteOfDay: number | null
   includeUnknown: boolean
 }
 
 interface TimeFilterBarProps {
   slot: Slot
+  endMinuteOfDay: number | null
   includeUnknown: boolean
   onChange: (state: TimeFilterState) => void
   disabled?: boolean
@@ -37,59 +35,117 @@ interface TimeFilterBarProps {
 
 export function TimeFilterBar({
   slot,
+  endMinuteOfDay,
   includeUnknown,
   onChange,
   disabled,
 }: TimeFilterBarProps) {
-  const dayId = useId()
-  const timeId = useId()
+  const dateId = useId()
+  const startTimeId = useId()
+  const endTimeId = useId()
   const unknownId = useId()
+  const [rangeWarning, setRangeWarning] = useState<string | null>(null)
+
+  const effectiveEnd =
+    endMinuteOfDay != null && endMinuteOfDay > slot.minuteOfDay
+      ? endMinuteOfDay
+      : null
+
+  function emit(
+    patch: Partial<TimeFilterState>,
+    warning: string | null = null,
+  ) {
+    setRangeWarning(warning)
+    onChange({
+      slot,
+      endMinuteOfDay,
+      includeUnknown,
+      ...patch,
+    })
+  }
 
   function updateSlot(patch: Partial<Slot>) {
-    onChange({
-      slot: { ...slot, ...patch },
-      includeUnknown,
-    })
+    const nextSlot = { ...slot, ...patch }
+    let nextEnd = endMinuteOfDay
+    let warning: string | null = null
+    if (nextEnd != null && nextEnd <= nextSlot.minuteOfDay) {
+      warning = 'End time must be after start time; using start time only.'
+      nextEnd = null
+    }
+    emit({ slot: nextSlot, endMinuteOfDay: nextEnd }, warning)
+  }
+
+  function handleDateChange(value: string) {
+    if (!value) return
+    updateSlot(slotFromDateString(value, slot.minuteOfDay))
+  }
+
+  function handleEndTimeChange(value: string) {
+    if (!value) {
+      emit({ endMinuteOfDay: null })
+      return
+    }
+    const minute = timeValueToMinute(value)
+    if (minute <= slot.minuteOfDay) {
+      emit(
+        { endMinuteOfDay: null },
+        'End time must be after start time; using start time only.',
+      )
+      return
+    }
+    emit({ endMinuteOfDay: minute }, null)
   }
 
   function handleUseNow() {
-    onChange({
-      slot: slotFromDate(new Date()),
-      includeUnknown,
-    })
+    const now = slotFromDate(new Date())
+    let nextEnd = endMinuteOfDay
+    let warning: string | null = null
+    if (nextEnd != null && nextEnd <= now.minuteOfDay) {
+      warning = 'End time must be after start time; using start time only.'
+      nextEnd = null
+    }
+    emit({ slot: now, endMinuteOfDay: nextEnd }, warning)
   }
 
   return (
-    <div className="time-filter-bar" aria-label="Filter by day and time">
+    <div className="time-filter-bar" aria-label="Filter by date and time">
       <div className="time-filter-controls">
-        <label htmlFor={dayId}>
-          Day
-          <select
-            id={dayId}
-            value={slot.dayOfWeek}
+        <label htmlFor={dateId}>
+          Date
+          <input
+            id={dateId}
+            type="date"
+            value={slotToDateString(slot)}
             disabled={disabled}
-            onChange={(e) =>
-              updateSlot({ dayOfWeek: Number(e.target.value) })
-            }
-          >
-            {DAY_OPTIONS.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </select>
+            onChange={(e) => handleDateChange(e.target.value)}
+          />
         </label>
 
-        <label htmlFor={timeId}>
-          Time
+        <label htmlFor={startTimeId}>
+          Start time
           <input
-            id={timeId}
+            id={startTimeId}
             type="time"
             value={minuteToTimeValue(slot.minuteOfDay)}
             disabled={disabled}
             onChange={(e) =>
               updateSlot({ minuteOfDay: timeValueToMinute(e.target.value) })
             }
+          />
+        </label>
+
+        <label htmlFor={endTimeId}>
+          End time (optional)
+          <input
+            id={endTimeId}
+            type="time"
+            value={
+              endMinuteOfDay != null
+                ? minuteToTimeValue(endMinuteOfDay)
+                : ''
+            }
+            disabled={disabled}
+            onChange={(e) => handleEndTimeChange(e.target.value)}
           />
         </label>
 
@@ -109,14 +165,18 @@ export function TimeFilterBar({
             checked={includeUnknown}
             disabled={disabled}
             onChange={(e) =>
-              onChange({ slot, includeUnknown: e.target.checked })
+              emit({ includeUnknown: e.target.checked })
             }
           />
-          Show unparsed schedules
+          Show rules without schedule data
         </label>
       </div>
       <p className="time-filter-status" role="status">
-        Showing rules for <strong>{formatSlotLabel(slot)}</strong>
+        Showing rules for{' '}
+        <strong>{formatSlotLabel(slot, effectiveEnd)}</strong>
+        {rangeWarning && (
+          <span className="time-filter-warning"> ({rangeWarning})</span>
+        )}
       </p>
     </div>
   )

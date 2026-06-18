@@ -1,78 +1,46 @@
-import {
-  CATEGORY_COLORS,
-  POLARITY_COLORS,
-} from '../lib/mapStyle'
+import { LINE_COLORS } from '../lib/mapStyle'
 import { formatSlotLabel, type Slot } from '../lib/schedule'
-import { scheduleCategoryLabel } from '../lib/labels'
-import type { ScheduleCategory } from '../types/parking'
 import './Legend.css'
 
-const LEGEND_CATEGORIES: ScheduleCategory[] = [
-  'no_parking',
-  'no_stopping',
-  'no_standing',
-  'restricted_periods',
-]
-
-const POLARITY_LEGEND = [
-  { key: 'permitted', label: 'Parking allowed', color: POLARITY_COLORS.permitted },
+const LEGEND_ITEMS = [
+  { label: 'Parking allowed', color: LINE_COLORS.allowed },
   {
-    key: 'restricted',
-    label: 'Restriction active',
-    color: CATEGORY_COLORS.no_parking,
+    label: 'No parking, stopping, or standing',
+    color: LINE_COLORS.restricted,
   },
   {
-    key: 'not_permitted',
-    label: 'Not in permitted window',
-    color: POLARITY_COLORS.not_permitted,
-  },
-  {
-    key: 'inactive',
-    label: 'Restriction not active',
-    color: POLARITY_COLORS.inactive,
-  },
-  {
-    key: 'unknown',
-    label: 'Schedule not parsed',
-    color: POLARITY_COLORS.unknown,
+    label: 'Schedule unclear or not parsed',
+    color: LINE_COLORS.ambiguous,
   },
 ] as const
 
 interface LegendProps {
   featureCount: number | null
   visibleCount: number | null
-  slotLabel: Slot
+  slot: Slot
+  endMinuteOfDay: number | null
 }
 
 export function Legend({
   featureCount,
   visibleCount,
-  slotLabel,
+  slot,
+  endMinuteOfDay,
 }: LegendProps) {
+  const periodLabel = formatSlotLabel(slot, endMinuteOfDay)
+  const timePhrase = endMinuteOfDay != null ? 'period' : 'time'
+
   return (
     <div className="map-legend" aria-label="Map legend">
-      <h3>At {formatSlotLabel(slotLabel)}</h3>
+      <h3>At {periodLabel}</h3>
       <ul>
-        {POLARITY_LEGEND.map((item) => (
-          <li key={item.key}>
+        {LEGEND_ITEMS.map((item) => (
+          <li key={item.label}>
             <span
               className="legend-swatch"
               style={{ background: item.color }}
             />
             {item.label}
-          </li>
-        ))}
-      </ul>
-
-      <h3 className="legend-section">Restriction type (active)</h3>
-      <ul>
-        {LEGEND_CATEGORIES.map((cat) => (
-          <li key={cat}>
-            <span
-              className="legend-swatch"
-              style={{ background: CATEGORY_COLORS[cat] }}
-            />
-            {scheduleCategoryLabel(cat)}
           </li>
         ))}
       </ul>
@@ -83,8 +51,8 @@ export function Legend({
           <strong>
             {(visibleCount ?? featureCount).toLocaleString()}
           </strong>{' '}
-          of {featureCount.toLocaleString()} geocoded curb segments at the
-          selected time.
+          of {featureCount.toLocaleString()} geocoded curb segments in the
+          selected {timePhrase}.
         </p>
       )}
     </div>

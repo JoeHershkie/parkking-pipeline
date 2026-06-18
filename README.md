@@ -11,7 +11,16 @@ Interactive map of geocoded Toronto curb parking bylaws. Data is produced by the
 cp ../parking-pipeline/data/final_parking_map.geojson public/data/
 ```
 
-GeoJSON files under `public/data/` are gitignored; refresh the copy whenever you re-run the pipeline geometry step.
+GeoJSON files under `public/data/` are gitignored; refresh the copy whenever you re-run the pipeline fullrun so features include structured `schedule` objects (`v: 1`).
+
+### Address search (Google Places)
+
+1. Create a [Google Cloud](https://console.cloud.google.com/) project with billing enabled.
+2. Enable **Places API (New)**.
+3. Create a browser API key restricted to HTTP referrers (e.g. `http://localhost:5173/*`) and Places APIs only.
+4. Copy `.env.example` to `.env` and set `VITE_GOOGLE_MAPS_API_KEY`.
+
+The app uses session tokens and Place Details (Essentials, location fields only) so typical usage stays within the free monthly Essentials caps (10,000 autocomplete + 10,000 details requests). Set a billing budget alert in Cloud Console if desired.
 
 ## Development
 
@@ -32,10 +41,18 @@ npm run preview
 ## Map features
 
 - Colored line segments by restriction type (`no_parking`, `no_stopping`, `no_standing`, `restricted_periods`)
-- **Day/time filter** — evaluate structured `schedule` windows at a selected slot; map colors reflect permitted vs restricted vs inactive vs unparsed
-- Toggle **Show unparsed schedules** to include or hide rows where the pipeline could not parse times (`failed` / `partial`)
+- **Date/time filter** — calendar date (defaults to today), start time, and optional end time on the same day; map colors reflect whether each rule’s structured `schedule` applies in that period
+- Ontario statutory public holidays (`exceptPublicHolidays`) and seasonal/month/day calendars from the pipeline schedule object
+- Rules with `status: failed` always appear on the map with a warning (never treated as active); toggle **Show rules without schedule data** only affects features missing a `schedule` property
+- `partial` schedules match on parsed windows only, with a “Partially parsed” note when unparsed clauses remain
 - Click the map to list bylaws near that point; click a single segment for a quick popup
-- Search by street name to zoom and highlight matching segments
-- Legend and footer attribution
+- Search by address (Google Places autocomplete) to fly to a location and highlight nearby curb segments
+- Legend with segment counts for the selected time period
 
-Holiday enforcement and seasonal/monthly windows are not evaluated yet (`exceptPublicHolidays` is display-only; unparsed seasonal text remains `failed`).
+Schedule logic lives under [`src/lib/schedule/`](src/lib/schedule/) and mirrors the parking-pipeline contract. Display text for bylaws still comes from the `Rule` property; filtering never regex-parses `Rule`.
+
+## Tests
+
+```bash
+npm test
+```

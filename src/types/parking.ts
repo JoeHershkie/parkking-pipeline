@@ -20,6 +20,8 @@ export interface ParkingProperties {
   _polarity?: FilterPolarity
   _visible?: boolean
   _unparsed?: boolean
+  _partial?: boolean
+  _failed?: boolean
 }
 
 export type ParkingFeature = Feature<LineString, ParkingProperties>

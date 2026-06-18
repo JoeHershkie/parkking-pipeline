@@ -75,9 +75,12 @@
   color: #16a34a;
 }
 
-.rule-status--not_permitted,
+.rule-status--not_permitted {
+  color: #dc2626;
+}
+
 .rule-status--inactive {
-  color: var(--text);
+  color: #16a34a;
 }
 
 .rule-status--unknown {
@@ -89,6 +92,20 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: #d97706;
+}
+
+.rule-badge--calendar {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.rule-badge--inverted {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.rule-badge--partial {
+  color: #b45309;
 }
 
 .rule-card dl {

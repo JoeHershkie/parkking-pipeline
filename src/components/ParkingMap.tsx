@@ -29,8 +29,13 @@ const HIDDEN_FILTER: maplibregl.FilterSpecification = ['==', 1, 0]
 export interface ParkingMapHandle {
   getMap: () => maplibregl.Map | null
   fitBounds: (bounds: [[number, number], [number, number]]) => void
-  setSearchHighlight: (highways: string[] | null) => void
-  applyScheduleFilter: (slot: Slot, includeUnknown: boolean) => number | null
+  clearSearchHighlight: () => void
+  flyToAndHighlight: (lng: number, lat: number) => Promise<number>
+  applyScheduleFilter: (
+    slot: Slot,
+    endMinuteOfDay: number | null,
+    includeUnknown: boolean,
+  ) => number | null
 }
 
 interface ParkingMapProps {
@@ -128,6 +133,7 @@ export function ParkingMap({
 
     const applyScheduleFilter = (
       slot: Slot,
+      endMinuteOfDay: number | null,
       includeUnknown: boolean,
     ): number | null => {
       const raw = rawDataRef.current
@@ -135,9 +141,42 @@ export function ParkingMap({
         | maplibregl.GeoJSONSource
         | undefined
       if (!raw || !source) return null
-      const enriched = enrichFeatureCollection(raw, slot, includeUnknown)
+      const enriched = enrichFeatureCollection(
+        raw,
+        slot,
+        includeUnknown,
+        endMinuteOfDay,
+      )
       source.setData(enriched)
       return enriched.features.length
+    }
+
+    const setHighlightByFeatureIds = (
+      featureIds: (string | number)[] | null,
+    ) => {
+      if (!map.getLayer(PARKING_HIGHLIGHT_LAYER_ID)) return
+      if (!featureIds?.length) {
+        map.setFilter(PARKING_HIGHLIGHT_LAYER_ID, HIDDEN_FILTER)
+        return
+      }
+      map.setFilter(PARKING_HIGHLIGHT_LAYER_ID, [
+        'in',
+        ['id'],
+        ['literal', featureIds],
+      ] as maplibregl.FilterSpecification)
+    }
+
+    const queryFeaturesNear = (lng: number, lat: number): ParkingFeature[] => {
+      const point = map.project([lng, lat])
+      const bbox = queryBBox(point, QUERY_BUFFER_PX)
+      const raw = map.queryRenderedFeatures(bbox, {
+        layers: [PARKING_LAYER_ID],
+      })
+      return dedupeParkingFeatures(
+        raw
+          .map(toParkingFeature)
+          .filter((f): f is ParkingFeature => f != null),
+      )
     }
 
     const handle: ParkingMapHandle = {
@@ -145,18 +184,40 @@ export function ParkingMap({
       fitBounds: (bounds) => {
         map.fitBounds(bounds, { padding: 48, maxZoom: 16, duration: 800 })
       },
-      setSearchHighlight: (highways) => {
-        if (!map.getLayer(PARKING_HIGHLIGHT_LAYER_ID)) return
-        if (!highways || highways.length === 0) {
-          map.setFilter(PARKING_HIGHLIGHT_LAYER_ID, HIDDEN_FILTER)
-          return
-        }
-        map.setFilter(PARKING_HIGHLIGHT_LAYER_ID, [
-          'in',
-          ['get', 'Highway'],
-          ['literal', highways],
-        ] as maplibregl.FilterSpecification)
-      },
+      clearSearchHighlight: () => setHighlightByFeatureIds(null),
+      flyToAndHighlight: (lng, lat) =>
+        new Promise((resolve) => {
+          const onMoveEnd = () => {
+            map.off('moveend', onMoveEnd)
+            const features = queryFeaturesNear(lng, lat)
+            const ids = features
+              .map((f) => f.id)
+              .filter((id): id is string | number => id != null)
+            if (ids.length > 0) {
+              setHighlightByFeatureIds(ids)
+            } else {
+              const highways = [
+                ...new Set(features.map((f) => f.properties.Highway)),
+              ]
+              if (highways.length > 0 && map.getLayer(PARKING_HIGHLIGHT_LAYER_ID)) {
+                map.setFilter(PARKING_HIGHLIGHT_LAYER_ID, [
+                  'in',
+                  ['get', 'Highway'],
+                  ['literal', highways],
+                ] as maplibregl.FilterSpecification)
+              } else {
+                setHighlightByFeatureIds(null)
+              }
+            }
+            resolve(features.length)
+          }
+          map.once('moveend', onMoveEnd)
+          map.flyTo({
+            center: [lng, lat],
+            zoom: 17,
+            duration: 800,
+          })
+        }),
       applyScheduleFilter,
     }
 

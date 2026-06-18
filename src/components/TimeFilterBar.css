@@ -69,3 +69,8 @@
   font-size: 0.85rem;
   color: var(--text);
 }
+
+.time-filter-warning {
+  font-style: italic;
+  color: var(--text);
+}

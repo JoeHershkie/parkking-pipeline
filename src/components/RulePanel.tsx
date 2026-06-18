@@ -2,7 +2,11 @@ import {
   formatMaxStay,
   scheduleCategoryLabel,
 } from '../lib/labels'
-import { polarityLabel, type FilterPolarity } from '../lib/schedule'
+import {
+  polarityLabel,
+  scheduleStatusHints,
+  type FilterPolarity,
+} from '../lib/schedule'
 import type { ParkingFeature } from '../types/parking'
 import './RulePanel.css'
 
@@ -36,6 +40,7 @@ export function RulePanel({ rules, clickLabel }: RulePanelProps) {
               const p = feature.properties
               const polarity = p._polarity
               const max = formatMaxStay(p.max, p.maxMinutes)
+              const hints = scheduleStatusHints(p.schedule)
               return (
                 <li key={`${i}-${p.Highway}-${p.Rule}`} className="rule-card">
                   <h3>{p.Highway}</h3>
@@ -44,8 +49,17 @@ export function RulePanel({ rules, clickLabel }: RulePanelProps) {
                       {polarityLabel(polarity, p.schedule_category)}
                     </p>
                   )}
-                  {p._unparsed && (
-                    <p className="rule-badge">Schedule not parsed</p>
+                  {hints.map((hint) => (
+                    <p
+                      key={hint.kind}
+                      className={`rule-badge rule-badge--${hint.kind}`}
+                      title={hint.title}
+                    >
+                      {hint.text}
+                    </p>
+                  ))}
+                  {p._unparsed && !p._failed && !p._partial && (
+                    <p className="rule-badge">No schedule data</p>
                   )}
                   <dl>
                     <div>
