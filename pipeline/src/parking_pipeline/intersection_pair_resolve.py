@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
-from intersection_normalize import normalize_intersection_street
-from tcl_highway_key import tcl_highway_key
-from tcl_highway_resolve import (
+from .intersection_normalize import normalize_intersection_street
+from .tcl_highway_key import tcl_highway_key
+from .tcl_highway_resolve import (
     base_remap_candidates,
     normalize_highway_for_lookup,
     resolve_tcl_highway,
@@ -67,7 +67,7 @@ def _legal_variants_for_street(street: str) -> tuple[str, ...]:
 
     Uses prefix-on-root (e.g. bond → bond avenue, bond park trail) plus base remaps.
     """
-    from tcl_highway_resolve import _ensure_index, _legal_keys, _prefix_matches
+    from .tcl_highway_resolve import _ensure_index, _legal_keys, _prefix_matches
 
     _ensure_index()
     root = street_name_root(street)
@@ -102,7 +102,7 @@ def _unique_intersection_ids_for_variants(
 
     Returns ``None`` when variants disagree on multiple intersections (ambiguous).
     """
-    import intersection_index as ix
+    from . import intersection_index as ix
 
     ids: set[int] = set()
     for cand in variants:
@@ -168,7 +168,7 @@ def resolve_pair_via_roots(street_a: str, street_b: str) -> PairRootMatch | None
     if not root_a or not root_b or root_a == root_b:
         return None
 
-    import intersection_index as ix
+    from . import intersection_index as ix
 
     ids_a = ix._ensure_token(root_a)
     if not ids_a:

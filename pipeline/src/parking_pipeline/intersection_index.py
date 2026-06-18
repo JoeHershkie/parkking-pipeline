@@ -8,7 +8,7 @@ from typing import Iterable
 import ahocorasick
 import geopandas as gpd
 
-from intersection_normalize import (
+from .intersection_normalize import (
     apply_street_alias,
     expand_cross_lookup_names,
     tcl_search_tokens,
@@ -57,7 +57,7 @@ def intersection_desc(intersection_id: int) -> str:
 
 def _clear_pair_root_cache() -> None:
     try:
-        from intersection_pair_resolve import clear_pair_root_cache
+        from .intersection_pair_resolve import clear_pair_root_cache
 
         clear_pair_root_cache()
     except ImportError:
@@ -175,7 +175,7 @@ def resolve_pair_ids(street_1: str, street_2: str) -> tuple[int, ...]:
     if hit:
         return hit
 
-    from intersection_pair_resolve import (
+    from .intersection_pair_resolve import (
         resolve_pair_via_roots,
         resolve_pair_via_unique_legal_variant,
     )

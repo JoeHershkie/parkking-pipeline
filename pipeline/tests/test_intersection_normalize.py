@@ -1,15 +1,11 @@
 """Tests for intersection name normalization."""
 
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from intersection_normalize import (  # noqa: E402
+from parking_pipeline.intersection_normalize import (  # noqa: E402
     apply_street_alias,
     clear_alias_cache,
     expand_cross_lookup_names,
@@ -139,8 +135,8 @@ def test_tcl_search_tokens_st_clair_west_alias():
 
 @pytest.fixture(scope='module')
 def tcl_street_index():
-    import tcl_highway_resolve as thr
-    from paths import data_path
+    from parking_pipeline import tcl_highway_resolve as thr
+    from parking_pipeline.paths import data_path
 
     st = gpd.read_file(data_path('tcl_streets.geojson'))
     legal = set(st['LINEAR_NAME_FULL_LEGAL'].str.lower())

@@ -7,7 +7,7 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-from paths import cache_dir
+from .paths import cache_dir
 
 _PICKLE_PROTOCOL = 5
 _CACHE_VERSION = 1

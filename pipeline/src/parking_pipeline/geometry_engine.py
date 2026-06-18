@@ -10,16 +10,16 @@ from concurrent.futures import ThreadPoolExecutor
 import geopandas as gpd
 import pandas as pd
 
-from failure_ledger import clear_stage, record_failure
-import geo_indices
-from geo_indices import init_geo, warm_intersection_index_from_dataframe
-import geo_slice
-from parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
-from paths import data_path
-from schedule_format import schedule_from_json
+from .failure_ledger import clear_stage, record_failure
+from . import geo_indices
+from .geo_indices import init_geo, warm_intersection_index_from_dataframe
+from . import geo_slice
+from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
+from .paths import data_path
+from .schedule_format import schedule_from_json
 
 # Re-export for scripts and tests that import geometry_engine as ge.
-from geo_indices import (  # noqa: F401
+from .geo_indices import (  # noqa: F401
     _build_street_index,
     _intersection_mask,
     _intersection_point_meters,
@@ -36,7 +36,7 @@ from geo_indices import (  # noqa: F401
     street_index,
     street_metre_index,
 )
-from geo_slice import (  # noqa: F401
+from .geo_slice import (  # noqa: F401
     AMBIGUOUS_INTERSECTION,
     BLOCK_FAMILY_RULES,
     DISCONNECTED_BLOCK,

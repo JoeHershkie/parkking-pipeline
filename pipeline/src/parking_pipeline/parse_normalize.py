@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from between_patterns import (
+from .between_patterns import (
     ANCHOR_FIELDS,
     A_POINT_OPPOSITE_LIMIT_RE,
     A_POINT_OPPOSITE_RE,
@@ -13,7 +13,7 @@ from between_patterns import (
     TERMINUS_ANCHOR_RE,
     THE_LIMIT_RE,
 )
-from parse_format import apply_trailing_qualifiers
+from .parse_format import apply_trailing_qualifiers
 
 _TERMINUS_DIR_MAP = {
     'northerly': 'north',

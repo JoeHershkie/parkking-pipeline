@@ -11,16 +11,14 @@ from typing import Any
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
+from parking_pipeline import geometry_engine as ge  # noqa: E402
+from parking_pipeline.geo_indices import init_geo  # noqa: E402
+from parking_pipeline.parse_format import PARSE_COLUMNS, row_to_parsed  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
-import geometry_engine as ge  # noqa: E402
-from geo_indices import init_geo  # noqa: E402
-from parse_format import PARSE_COLUMNS, row_to_parsed  # noqa: E402
-from paths import data_path  # noqa: E402
+_SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS))
 
-# Reuse Between-pattern categorization from intersection failure script
-sys.path.insert(0, str(ROOT / 'scripts'))
 from analyze_intersection_failures import categorize_cross  # noqa: E402
 
 COLLAPSE_TOL_M = 1e-3
@@ -521,7 +519,7 @@ def main() -> None:
         df = df.loc[:, ~df.columns.duplicated()]
 
     if df.empty:
-        out = ROOT / 'data' / 'geometry_failure_analysis.csv'
+        out = data_path('geometry_failure_analysis.csv')
         pd.DataFrame(columns=[
             'row_id', 'cause_category', 'attribution', 'fix_hint', 'rule_type',
             'delta_m', 'between_category',
@@ -576,7 +574,7 @@ def main() -> None:
     for cause in cat.head(6).index:
         _print_exemplars(df, cause)
 
-    out = ROOT / 'data' / 'geometry_failure_analysis.csv'
+    out = data_path('geometry_failure_analysis.csv')
     df.to_csv(out, index=False)
     print(f'\nWrote {out}')
 

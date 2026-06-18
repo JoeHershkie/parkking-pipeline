@@ -10,8 +10,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from failure_ledger import clear_stage, record_failure
-from paths import data_path
+from .failure_ledger import clear_stage, record_failure
+from .paths import data_path
 
 # --- Schedule allowlist (exact scheduleName strings; no substring matching) ---
 

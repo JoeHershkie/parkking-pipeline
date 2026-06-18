@@ -1,14 +1,10 @@
 """Tests for bylaw_text.preprocess_between."""
 
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from bylaw_text import preprocess_between  # noqa: E402
+from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
 
 
 def test_preprocess_between_fixes_metres_spacing() -> None:

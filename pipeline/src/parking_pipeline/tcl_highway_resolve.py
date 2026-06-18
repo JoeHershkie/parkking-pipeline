@@ -7,8 +7,8 @@ import functools
 import re
 from pathlib import Path
 
-from paths import data_path
-from tcl_highway_key import tcl_highway_key
+from .paths import data_path
+from .tcl_highway_key import tcl_highway_key
 
 # Terminal street-type tokens (longest first).
 _STREET_TYPES: tuple[str, ...] = tuple(
@@ -303,19 +303,19 @@ def build_index(
     _resolve_tcl_highway_with_context_cached.cache_clear()
     intersection_resolve_tokens.cache_clear()
     try:
-        from intersection_normalize import tcl_search_tokens
+        from .intersection_normalize import tcl_search_tokens
 
         tcl_search_tokens.cache_clear()
     except ImportError:
         pass
     try:
-        from intersection_pair_resolve import clear_pair_root_cache
+        from .intersection_pair_resolve import clear_pair_root_cache
 
         clear_pair_root_cache()
     except ImportError:
         pass
     try:
-        from lane_highway_resolve import reset_lane_resolve_caches
+        from .lane_highway_resolve import reset_lane_resolve_caches
 
         reset_lane_resolve_caches()
     except ImportError:
@@ -530,8 +530,8 @@ def _resolved_partner_keys(crosses: tuple[str, ...]) -> tuple[str, ...]:
 def _unique_remap_for_partner(partner_key: str, street: str) -> str | None:
     """Single TCL legal for *street* that intersects *partner_key*, if unique."""
     try:
-        import intersection_index as ix
-        from intersection_pair_resolve import _legal_variants_for_street
+        from . import intersection_index as ix
+        from .intersection_pair_resolve import _legal_variants_for_street
     except ImportError:
         return None
 
@@ -559,8 +559,8 @@ def _disambiguate_highway_with_crosses(
         return candidates[0] if candidates else key
 
     try:
-        import intersection_index as ix
-        from intersection_pair_resolve import resolve_pair_via_roots
+        from . import intersection_index as ix
+        from .intersection_pair_resolve import resolve_pair_via_roots
     except ImportError:
         return key
 

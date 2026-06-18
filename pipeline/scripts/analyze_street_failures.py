@@ -9,19 +9,18 @@ from typing import Any
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-sys.path.insert(0, str(ROOT / 'scripts'))
+_SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS))
 
-from highway_categorize import categorize_highway  # noqa: E402
-from lane_highway_resolve import (  # noqa: E402
+from parking_pipeline.highway_categorize import categorize_highway  # noqa: E402
+from parking_pipeline.lane_highway_resolve import (  # noqa: E402
     infer_lane_phrase_from_between,
     parse_lane_highway_phrase,
     resolve_lane_highway,
 )
-from paths import data_path  # noqa: E402
-import tcl_highway_resolve as thr  # noqa: E402
-from tcl_highway_key import tcl_highway_key  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
+from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
+from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 
 def _truly_absent(highway: str, tcl_names: pd.DataFrame) -> bool:

@@ -6,8 +6,8 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from tcl_highway_key import tcl_highway_key
-import tcl_highway_resolve as thr
+from .tcl_highway_key import tcl_highway_key
+from . import tcl_highway_resolve as thr
 
 _GENERIC_LANE_RE = re.compile(r'^lane$', re.I)
 _LANE_POSITION_RE = re.compile(
@@ -228,9 +228,9 @@ def _lazy_street_graphs() -> dict:
         return _STREET_GRAPHS_CACHE
     try:
         import geopandas as gpd
-        import geo_cache as gc
-        import tcl_graph as tg
-        from paths import data_path
+        from . import geo_cache as gc
+        from . import tcl_graph as tg
+        from .paths import data_path
 
         streets_path = data_path('tcl_streets.geojson')
         ix_path = data_path('tcl_intersections.geojson')
@@ -267,7 +267,7 @@ def _disambiguate_lane_by_block_graph(
     if not graphs:
         return None
 
-    import tcl_graph as tg
+    from . import tcl_graph as tg
 
     hits: list[str] = []
     for key in candidates:
@@ -466,7 +466,7 @@ def _resolve_named_lane_graph(
     if not anchor_key or anchor_key not in legal_keys:
         return None
     try:
-        import tcl_graph as tg
+        from . import tcl_graph as tg
     except ImportError:
         return None
 

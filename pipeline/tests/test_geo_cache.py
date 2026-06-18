@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import geo_cache as gc
-import intersection_index as ix
-from paths import cache_dir
+from parking_pipeline import geo_cache as gc
+from parking_pipeline import intersection_index as ix
+from parking_pipeline.paths import cache_dir
 
 
 @pytest.fixture(autouse=True)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,14 +11,11 @@ import pyproj
 from shapely.geometry import LineString, Point
 from shapely.ops import transform
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import geo_indices as gi
-import geometry_engine as ge
-import tcl_graph as tg
-from paths import data_path
-from tcl_graph import StreetEdge, StreetGraph
+from parking_pipeline import geo_indices as gi
+from parking_pipeline import geometry_engine as ge
+from parking_pipeline import tcl_graph as tg
+from parking_pipeline.paths import data_path
+from parking_pipeline.tcl_graph import StreetEdge, StreetGraph
 
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
 
@@ -62,7 +58,7 @@ def manning(street_graphs):
 @pytest.fixture(scope='module')
 def geometry_indexes(street_graphs):
     gi.street_graphs = street_graphs
-    thr = __import__('tcl_highway_resolve', fromlist=['build_index_from_csv'])
+    from parking_pipeline import tcl_highway_resolve as thr
     thr.build_index_from_csv(legal_keys=set(street_graphs.keys()))
 
 

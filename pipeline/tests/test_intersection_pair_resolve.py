@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import intersection_index as ix
-import intersection_pair_resolve as ipr
-import tcl_graph as tg
-import tcl_highway_resolve as thr
-from paths import data_path
+from parking_pipeline import intersection_index as ix
+from parking_pipeline import intersection_pair_resolve as ipr
+from parking_pipeline import tcl_graph as tg
+from parking_pipeline import tcl_highway_resolve as thr
+from parking_pipeline.paths import data_path
 
 
 @pytest.fixture(scope='module')

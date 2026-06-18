@@ -3,17 +3,13 @@
 
 from __future__ import annotations
 
-import sys
 from collections import Counter
 from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from paths import data_path  # noqa: E402
-from schedule_format import parse_schedule  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
+from parking_pipeline.schedule_format import parse_schedule  # noqa: E402
 
 
 def _has_calendar(sched: dict) -> bool:

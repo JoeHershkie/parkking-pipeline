@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Callable
@@ -13,18 +12,15 @@ from typing import Callable
 import geopandas as gpd
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import intersection_index as ix  # noqa: E402
-import tcl_graph as tg  # noqa: E402
-from intersection_normalize import (  # noqa: E402
+from parking_pipeline import intersection_index as ix  # noqa: E402
+from parking_pipeline import tcl_graph as tg  # noqa: E402
+from parking_pipeline.intersection_normalize import (  # noqa: E402
     _REPLACEMENTS,
     apply_street_alias,
     clear_alias_cache,
     normalize_intersection_street,
 )
-from paths import data_path  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 # Golden pairs from tests/test_intersection_index.py
 GOLDEN_PAIRS = [
@@ -51,7 +47,7 @@ def tokenize_no_alias(street_name: str, norm_fn: Callable[[str], str]) -> str:
 
 def tokenize_with_alias(street_name: str, norm_fn: Callable[[str], str]) -> str:
     key = str(street_name).strip().lower()
-    from intersection_normalize import _load_alias_map
+    from parking_pipeline.intersection_normalize import _load_alias_map
     alias = _load_alias_map().get(key)
     if alias:
         return alias
@@ -230,7 +226,7 @@ def main() -> None:
     for k, v in result_no_alias.items():
         print(f'  {k}: {v}')
 
-    out = ROOT / 'data' / 'normalizer_rule_evaluation.json'
+    out = data_path('normalizer_rule_evaluation.json')
     out.write_text(json.dumps({'with_aliases': result, 'rule_only': result_no_alias}, indent=2))
     print(f'\nWrote {out}')
 

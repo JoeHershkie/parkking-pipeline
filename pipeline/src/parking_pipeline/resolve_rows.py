@@ -7,17 +7,17 @@ from collections import Counter
 
 import pandas as pd
 
-from failure_ledger import clear_stage, record_failure
-from parse_format import (
+from .failure_ledger import clear_stage, record_failure
+from .parse_format import (
     RESOLVE_COLUMNS,
     _parse_valid_flag,
     _resolve_valid_flag,
     resolve_columns_for_row,
     row_to_parsed,
 )
-from paths import data_path
-from tcl_highway_key import tcl_highway_key
-import tcl_highway_resolve as thr
+from .paths import data_path
+from .tcl_highway_key import tcl_highway_key
+from . import tcl_highway_resolve as thr
 
 RESOLVE_STREET_NOT_FOUND = 'RESOLVE_STREET_NOT_FOUND'
 

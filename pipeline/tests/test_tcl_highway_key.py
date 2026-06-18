@@ -1,12 +1,8 @@
 """Tests for TCL street-index highway key normalization."""
 
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from tcl_highway_key import tcl_highway_key  # noqa: E402
+from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 
 def test_plain_name_unchanged():

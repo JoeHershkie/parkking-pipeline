@@ -1,23 +1,19 @@
 """Tests for failure_ledger.csv schema and record_failure."""
 
 import csv
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from failure_ledger import (  # noqa: E402
+from parking_pipeline.failure_ledger import (  # noqa: E402
     LEDGER_COLUMNS,
     LEDGER_EXCLUDED_REASON_CODES,
     clear_stage,
     record_failure,
 )
-from bylaw_text import preprocess_between  # noqa: E402
+from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
 
 
 def test_record_failure_stores_between_parsed_input(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr('failure_ledger.data_path', lambda name: tmp_path / name)
+    monkeypatch.setattr('parking_pipeline.failure_ledger.data_path', lambda name: tmp_path / name)
     ledger = tmp_path / 'failure_ledger.csv'
     raw = 'Yonge Street to Victoria Street'
     parsed_input = preprocess_between(raw)
@@ -31,7 +27,7 @@ def test_record_failure_stores_between_parsed_input(tmp_path, monkeypatch) -> No
 
 
 def test_clear_stage_preserves_between_parsed_input(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr('failure_ledger.data_path', lambda name: tmp_path / name)
+    monkeypatch.setattr('parking_pipeline.failure_ledger.data_path', lambda name: tmp_path / name)
     record_failure(1, 'parse', 'PARSE_NO_MATCH', 'x', 'Hwy', 'raw', 'parsed')
     record_failure(2, 'geo', 'GEOMETRY_ERROR', 'x', 'Hwy', 'raw')
     clear_stage('geo')

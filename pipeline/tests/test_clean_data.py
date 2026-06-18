@@ -1,14 +1,10 @@
 """Tests for clean_data helpers."""
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from clean_data import deduplicate_rules, prohibited_times  # noqa: E402
+from parking_pipeline.clean_data import deduplicate_rules, prohibited_times  # noqa: E402
 
 
 def test_prohibited_times_anytime_from_between() -> None:
@@ -21,7 +17,7 @@ def test_prohibited_times_anytime_from_between() -> None:
 
 
 def test_deduplicate_does_not_write_ledger(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr('failure_ledger.data_path', lambda name: tmp_path / name)
+    monkeypatch.setattr('parking_pipeline.failure_ledger.data_path', lambda name: tmp_path / name)
     df = pd.DataFrame([
         {
             '_id': 10,

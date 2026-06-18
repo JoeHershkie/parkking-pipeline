@@ -7,8 +7,8 @@ import re
 
 import pandas as pd
 
-from intersection_normalize import apply_street_alias
-from tcl_highway_resolve import tcl_lookup_key
+from .intersection_normalize import apply_street_alias
+from .tcl_highway_resolve import tcl_lookup_key
 
 PARSE_COLUMNS = [
     'rule_type',
@@ -343,8 +343,8 @@ def row_to_parsed(row) -> dict:
 
 def resolve_columns_for_row(row, parsed: dict) -> dict:
     """Resolve TCL highway key and refresh norm columns for a parsed row."""
-    from lane_highway_resolve import lookup_highway_key
-    import tcl_highway_resolve as thr
+    from .lane_highway_resolve import lookup_highway_key
+    from . import tcl_highway_resolve as thr
 
     highway = str(_row_get(row, 'Highway') or '')
     between = str(_row_get(row, 'Between') or '')
@@ -379,7 +379,7 @@ def highway_from_row(row) -> str:
         if resolved:
             return resolved
 
-    from lane_highway_resolve import lookup_highway_key
+    from .lane_highway_resolve import lookup_highway_key
 
     highway = str(_row_get(row, 'Highway') or '')
     between = str(_row_get(row, 'Between') or '')

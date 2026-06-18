@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pytest
 from shapely.geometry import LineString
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import geo_indices as gi
-import geometry_engine as ge  # noqa: E402
-import tcl_graph as tg  # noqa: E402
-from geo_slice import ZERO_SPAN, SliceResult  # noqa: E402
-from parse_format import highway_from_row, row_to_parsed  # noqa: E402
-from paths import data_path  # noqa: E402
+from parking_pipeline import geo_indices as gi
+from parking_pipeline import geometry_engine as ge  # noqa: E402
+from parking_pipeline import tcl_graph as tg  # noqa: E402
+from parking_pipeline.geo_slice import ZERO_SPAN, SliceResult  # noqa: E402
+from parking_pipeline.parse_format import highway_from_row, row_to_parsed  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 
 def test_zero_span_result_not_ok() -> None:
@@ -42,7 +38,7 @@ def geo_env():
     gi.street_graphs = tg.build_street_graphs(st)
     gi.street_index = gi._build_street_index(st)
     gi.intersections_gdf = ix
-    import tcl_highway_resolve as thr
+    from parking_pipeline import tcl_highway_resolve as thr
 
     thr.build_index(legal_keys=set(gi.street_index.keys()), base_to_legals={})
     return gi

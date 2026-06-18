@@ -13,14 +13,13 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-sys.path.insert(0, str(ROOT / 'scripts'))
+_SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS))
 
-import tcl_graph as tg  # noqa: E402
+from parking_pipeline import tcl_graph as tg  # noqa: E402
 from analyze_intersection_failures import categorize_cross  # noqa: E402
-from intersection_normalize import apply_street_alias, normalize_intersection_street  # noqa: E402
-from paths import data_path  # noqa: E402
+from parking_pipeline.intersection_normalize import apply_street_alias, normalize_intersection_street  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 MIN_DESC_HITS = 5
 ONE_OFF_BYLAW_LIMIT = 5
@@ -202,7 +201,7 @@ def main() -> None:
             'note': note,
         })
 
-    out_path = ROOT / 'data' / 'street_alias_suggestions.csv'
+    out_path = data_path('street_alias_suggestions.csv')
     with out_path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(
             f,

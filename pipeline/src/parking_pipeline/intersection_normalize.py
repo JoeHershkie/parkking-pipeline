@@ -6,7 +6,7 @@ import csv
 import re
 from functools import lru_cache
 
-from paths import data_path
+from .paths import data_path
 
 # Word-boundary suffix and direction replacements (order matters for multi-word types).
 _REPLACEMENTS: tuple[tuple[str, str], ...] = (
@@ -178,7 +178,7 @@ def tcl_search_tokens(street_name: str) -> tuple[str, ...]:
     plain = normalize_intersection_street(raw)
 
     # Suffix/base remap from tcl_street_names (e.g. bylaw Street → TCL Road).
-    from tcl_highway_resolve import intersection_resolve_tokens
+    from .tcl_highway_resolve import intersection_resolve_tokens
 
     for legal_token in intersection_resolve_tokens(raw):
         add(legal_token)

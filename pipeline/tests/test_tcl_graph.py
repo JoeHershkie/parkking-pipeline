@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import geopandas as gpd
@@ -10,11 +9,8 @@ import pyproj
 import pytest
 from shapely.ops import transform
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import tcl_graph as tg
-from paths import data_path
+from parking_pipeline import tcl_graph as tg
+from parking_pipeline.paths import data_path
 
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
 

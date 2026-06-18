@@ -2,25 +2,21 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from lane_highway_resolve import (  # noqa: E402
+from parking_pipeline.lane_highway_resolve import (  # noqa: E402
     infer_lane_phrase_from_between,
     lane_phrases_from_between,
     parse_lane_highway_phrase,
     resolve_lane_highway,
     lookup_highway_key,
 )
-from paths import data_path  # noqa: E402
-import tcl_highway_resolve as thr  # noqa: E402
-from tcl_highway_key import tcl_highway_key  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
+from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
+from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 
 @pytest.fixture(scope='module')
@@ -91,9 +87,9 @@ def test_resolve_christie_without_cross_is_ambiguous(tcl_lane_index: None) -> No
 def tcl_lane_graph_index() -> None:
     """Street index + graphs for lane block disambiguation (needs TCL geo files)."""
     import geopandas as gpd
-    import tcl_graph as tg
+    from parking_pipeline import tcl_graph as tg
 
-    from lane_highway_resolve import reset_lane_resolve_caches
+    from parking_pipeline.lane_highway_resolve import reset_lane_resolve_caches
 
     streets = data_path('tcl_streets.geojson')
     ix_path = data_path('tcl_intersections.geojson')

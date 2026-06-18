@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 import random
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import intersection_index as ix
-import tcl_graph as tg
-from intersection_normalize import (
+from parking_pipeline import intersection_index as ix
+from parking_pipeline import tcl_graph as tg
+from parking_pipeline.intersection_normalize import (
     expand_cross_lookup_names,
     tcl_search_tokens,
 )
-from paths import data_path
+from parking_pipeline.paths import data_path
 
 ARMADALE = 'armadale avenue'
 COLBECK = 'Colbeck Street'

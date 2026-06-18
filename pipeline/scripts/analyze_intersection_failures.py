@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -13,12 +12,9 @@ from typing import Any
 import geopandas as gpd
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import tcl_graph as tg  # noqa: E402
-from intersection_normalize import apply_street_alias  # noqa: E402
-from paths import data_path  # noqa: E402
+from parking_pipeline import tcl_graph as tg  # noqa: E402
+from parking_pipeline.intersection_normalize import apply_street_alias  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 
 def norm_production(name: str) -> str:
@@ -367,12 +363,12 @@ def main() -> None:
     miss = merged[~merged['hit_production']]
     print(miss['category'].value_counts().head(15).to_string())
 
-    out = ROOT / 'data' / 'intersection_failure_analysis.csv'
+    out = data_path('intersection_failure_analysis.csv')
     merged.to_csv(out, index=False)
     print(f'\nWrote {out}')
 
     summary = _summary_dict(merged, n_parsed)
-    summary_path = ROOT / 'data' / 'intersection_failure_summary.json'
+    summary_path = data_path('intersection_failure_summary.json')
     summary_path.write_text(json.dumps(summary, indent=2), encoding='utf-8')
     print(f'Wrote {summary_path}')
 

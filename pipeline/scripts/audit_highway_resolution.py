@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from paths import data_path  # noqa: E402
-import tcl_highway_resolve as thr  # noqa: E402
-from tcl_highway_key import tcl_highway_key  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
+from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
+from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 
 def _legacy_key(highway: str) -> str:

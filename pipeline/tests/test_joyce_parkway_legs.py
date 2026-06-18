@@ -1,21 +1,19 @@
 """Integration checks for highway leg strip + component-qualified blocks."""
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import tcl_highway_resolve as thr  # noqa: E402
-from parse_format import row_to_parsed  # noqa: E402
+from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
+from parking_pipeline.parse_format import row_to_parsed  # noqa: E402
 
 pytest.importorskip('geopandas')
 
-import geometry_engine as ge  # noqa: E402
-from geo_indices import init_geo  # noqa: E402
+from parking_pipeline import geometry_engine as ge  # noqa: E402
+from parking_pipeline.geo_indices import init_geo  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
+from parking_pipeline.parse_format import row_to_parsed  # noqa: E402
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -32,7 +30,10 @@ def _geo_indexes():
     ],
 )
 def test_joyce_parkway_legs_slice(row_id: int, bylaw_highway: str) -> None:
-    parsed = pd.read_csv(ROOT / 'data/parsed_successes.csv')
+    successes = data_path('parsed_successes.csv')
+    if not successes.exists():
+        pytest.skip('parsed_successes.csv not present locally')
+    parsed = pd.read_csv(successes)
     row = parsed.loc[parsed['_id'] == row_id].iloc[0]
     lookup = thr.tcl_lookup_key(bylaw_highway)
     assert lookup == 'joyce parkway'

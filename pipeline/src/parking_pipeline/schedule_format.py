@@ -27,7 +27,7 @@ from typing import Any
 
 import pandas as pd
 
-from public_holidays import is_public_holiday
+from .public_holidays import is_public_holiday
 
 SCHEDULE_VERSION = 1
 

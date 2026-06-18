@@ -1,12 +1,8 @@
 """Tests for highway categorization buckets."""
 
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from highway_categorize import categorize_highway  # noqa: E402
+from parking_pipeline.highway_categorize import categorize_highway  # noqa: E402
 
 
 def test_generic_lane():

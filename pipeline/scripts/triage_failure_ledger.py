@@ -11,17 +11,16 @@ from typing import Any
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-sys.path.insert(0, str(ROOT / 'scripts'))
+_SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS))
 
 from analyze_intersection_failures import (  # noqa: E402
     attribution,
     categorize_cross,
 )
-from failure_ledger import LEDGER_EXCLUDED_REASON_CODES  # noqa: E402
-from bylaw_text import preprocess_between  # noqa: E402
-from paths import data_path  # noqa: E402
+from parking_pipeline.failure_ledger import LEDGER_EXCLUDED_REASON_CODES  # noqa: E402
+from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 _FIELD_RE = re.compile(r'^(start|end|offset)_intersection=(.*)$', re.I)
 

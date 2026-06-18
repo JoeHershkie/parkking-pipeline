@@ -14,7 +14,7 @@ import pyproj
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import linemerge, transform
 
-import intersection_index as ix_index
+from . import intersection_index as ix_index
 
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
 project_to_gps = pyproj.Transformer.from_crs(32617, 4326, always_xy=True).transform

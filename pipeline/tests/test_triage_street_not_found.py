@@ -5,9 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 
 from triage_failure_ledger import assign_fix_tier, build_triage  # noqa: E402
 

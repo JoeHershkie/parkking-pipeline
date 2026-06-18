@@ -10,10 +10,10 @@ from functools import lru_cache
 from shapely.geometry import LineString, MultiLineString
 from shapely.ops import substring, transform
 
-import geo_indices as gi
-import tcl_highway_resolve as thr
-import tcl_graph as tg
-from tcl_graph import PathPick, StreetGraph
+from . import geo_indices as gi
+from . import tcl_highway_resolve as thr
+from . import tcl_graph as tg
+from .tcl_graph import PathPick, StreetGraph
 
 STREET_NOT_FOUND = 'STREET_NOT_FOUND'
 INTERSECTION_NOT_FOUND = 'INTERSECTION_NOT_FOUND'

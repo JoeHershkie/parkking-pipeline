@@ -1,20 +1,16 @@
 """Tests for parse_between misparse fixes."""
 
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from parse_between import (  # noqa: E402
+from parking_pipeline.parse_between import (  # noqa: E402
     normalize_anchor_phrase,
     normalize_parsed,
     parse_between,
     preprocess_between,
 )
-from parse_format import validate_parsed  # noqa: E402
+from parking_pipeline.parse_format import validate_parsed  # noqa: E402
 
 
 @pytest.mark.parametrize(

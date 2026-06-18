@@ -1,14 +1,10 @@
 """Tests for parse validation and norm columns."""
 
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from parse_format import (  # noqa: E402
+from parking_pipeline.parse_format import (  # noqa: E402
     apply_trailing_qualifiers,
     highway_from_row,
     norm_anchor,

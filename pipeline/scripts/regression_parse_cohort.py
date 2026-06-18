@@ -9,13 +9,10 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from bylaw_text import preprocess_between
-from parse_between import parse_between  # noqa: E402
-from parse_format import validate_parsed  # noqa: E402
-from paths import data_path  # noqa: E402
+from parking_pipeline.bylaw_text import preprocess_between
+from parking_pipeline.parse_between import parse_between  # noqa: E402
+from parking_pipeline.parse_format import validate_parsed  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 COHORT_HINT = 'Add Between regex in parse_between for this pattern class'
 

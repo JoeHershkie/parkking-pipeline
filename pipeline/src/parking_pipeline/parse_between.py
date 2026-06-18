@@ -9,7 +9,7 @@ from typing import Callable
 
 import pandas as pd
 
-from between_patterns import (
+from .between_patterns import (
     A_POINT_RE,
     APPROX as _APPROX,
     COMPASS as _COMPASS,
@@ -23,21 +23,21 @@ from between_patterns import (
     POINT_METRES_FRAGMENT_RE,
     STREET_END_RE,
 )
-from bylaw_text import preprocess_between
-from failure_ledger import clear_stage, record_failure
-from parse_format import (
+from .bylaw_text import preprocess_between
+from .failure_ledger import clear_stage, record_failure
+from .parse_format import (
     EXPORT_PARSE_COLUMNS,
     norm_columns_for_row,
     parsed_dict_to_columns,
     validate_parsed,
 )
-from paths import data_path
-from parse_normalize import (
+from .paths import data_path
+from .parse_normalize import (
     normalize_anchor_phrase,
     normalize_parsed,
     primary_compass as _primary_compass,
 )
-from schedule_format import SCHEDULE_EXPORT_COLUMNS
+from .schedule_format import SCHEDULE_EXPORT_COLUMNS
 
 __all__ = (
     'PARSE_NO_MATCH',

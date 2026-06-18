@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parking-pipeline"
+version = "0.1.0"
+description = "Toronto parking bylaw ETL — parse regulations and map them to centreline geometry"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pandas==3.0.3",
+    "geopandas==1.1.3",
+    "shapely==2.1.2",
+    "pyproj==3.7.2",
+    "pyogrio==0.12.1",
+    "pyahocorasick==2.3.1",
+    "holidays==0.97",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "pytest-cov==6.2.1",
+    "ruff==0.12.2",
+]
+
+[project.scripts]
+parking-clean = "parking_pipeline.clean_data:main"
+parking-parse-schedule = "parking_pipeline.parse_schedule:main"
+parking-parse-between = "parking_pipeline.parse_between:main"
+parking-resolve = "parking_pipeline.resolve_rows:main"
+parking-geo = "parking_pipeline.geometry_engine:main"
+parking-run = "parking_pipeline.fullrun:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]

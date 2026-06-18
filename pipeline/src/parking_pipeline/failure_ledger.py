@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from paths import data_path
+from .paths import data_path
 
 LEDGER_COLUMNS = [
     'row_id', 'stage', 'reason_code', 'detail', 'highway', 'between', 'between_parsed_input',

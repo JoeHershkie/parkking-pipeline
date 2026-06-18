@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import geopandas as gpd
@@ -11,14 +10,11 @@ import pytest
 from shapely.geometry import LineString
 from shapely.ops import transform
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-import geo_indices as gi
-import geometry_engine as ge
-import tcl_graph as tg
-from parse_format import highway_from_row, row_to_parsed
-from paths import data_path
+from parking_pipeline import geo_indices as gi
+from parking_pipeline import geometry_engine as ge
+from parking_pipeline import tcl_graph as tg
+from parking_pipeline.parse_format import highway_from_row, row_to_parsed
+from parking_pipeline.paths import data_path
 
 # Synthetic line: high easting at param 0 (Leslie mouth), low easting at param 1 (west tip).
 _EQUESTRIAN_LIKE_M = LineString([(630934.0, 4851738.0), (630802.0, 4851700.0)])
@@ -54,7 +50,7 @@ def test_equestrian_court_leslie_to_west_end(street_graphs) -> None:
     """Leslie Street + west end of Equestrian Court → span along the court, not ZERO_SPAN."""
     import pandas as pd
 
-    import tcl_highway_resolve as thr
+    from parking_pipeline import tcl_highway_resolve as thr
 
     thr.build_index(legal_keys=set(gi.street_index.keys()), base_to_legals={})
 

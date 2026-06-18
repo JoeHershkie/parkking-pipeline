@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
 SAMPLES = ROOT / 'data' / 'samples'
 
 # Streets needed by golden-path geometry / highway / intersection tests.
@@ -28,6 +24,18 @@ STREET_KEYWORDS = (
     'baxter',
     'yonge',
     'elm',
+    'bond',
+    'duncairn',
+    'fairfield',
+    'cardiff',
+    'bloor',
+    'christie',
+    'royal york',
+    'beaumont',
+    'sibley',
+    'victoria',
+    "o'connor",
+    'sandra',
 )
 
 
@@ -79,7 +87,7 @@ def build_street_names_sample(streets_path: Path, out_dir: Path) -> None:
         .sort_values()
     )
     out_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({'LINEAR_NAME_FULL_LEGAL': names}).to_csv(
+    pd.DataFrame({'linear_name_full_legal': names}).to_csv(
         out_dir / 'tcl_street_names.csv', index=False,
     )
     print(f'Street names sample: {len(names)} rows -> {out_dir / "tcl_street_names.csv"}')

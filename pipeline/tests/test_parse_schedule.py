@@ -1,22 +1,18 @@
 """Tests for schedule_format / parse_schedule."""
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
 import pandas as pd
 
-from parse_schedule import (  # noqa: E402
+from parking_pipeline.parse_schedule import (  # noqa: E402
     SCHEDULE_EMPTY,
     empty_times_default,
     parse_rows,
 )
-from schedule_format import (  # noqa: E402
+from parking_pipeline.schedule_format import (  # noqa: E402
     overlaps_membership,
     parse_max_minutes,
     parse_schedule,

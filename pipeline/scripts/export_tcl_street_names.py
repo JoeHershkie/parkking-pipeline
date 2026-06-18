@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'src'))
-
-from paths import data_path  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 
 
 def _agg_street_names(gdf: gpd.GeoDataFrame) -> pd.DataFrame:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from between_patterns import (
+from .between_patterns import (
     ADJACENT_TO_RE,
     COMPASS,
     COMPOUND_DIR,
