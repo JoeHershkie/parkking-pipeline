@@ -1,0 +1,51 @@
+# --- Monorepo root ---
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+
+# --- Python (pipeline/) ---
+pipeline/__pycache__/
+pipeline/**/__pycache__/
+pipeline/**/*.py[cod]
+pipeline/.venv/
+pipeline/**/*.egg-info/
+pipeline/.pytest_cache/
+
+# --- Node (web/) ---
+web/node_modules/
+web/dist/
+web/dist-ssr/
+web/*.local
+web/.env
+
+# --- Pipeline generated outputs ---
+pipeline/data/toronto_raw_parking_dump.csv
+pipeline/data/clean_parking_targets.csv
+pipeline/data/parsed_successes.csv
+pipeline/data/parsed_schedules.csv
+pipeline/data/failure_ledger.csv
+pipeline/data/failure_triage.csv
+pipeline/data/failure_triage_summary.json
+pipeline/data/final_parking_map.geojson
+pipeline/data/intersection_failure_analysis.csv
+pipeline/data/street_failure_analysis.csv
+pipeline/data/geometry_failure_analysis.csv
+pipeline/data/street_alias_suggestions.csv
+pipeline/data/highway_resolution_audit.json
+pipeline/data/intersection_failure_summary.json
+pipeline/data/street_failure_summary.json
+pipeline/data/normalizer_rule_evaluation.json
+pipeline/data/phase_a_baseline_summary.json
+pipeline/data/*.pdf
+pipeline/data/.geo_cache/
+
+# --- Pipeline external data (download locally) ---
+pipeline/data/tcl_streets.geojson
+pipeline/data/tcl_intersections.geojson
+pipeline/data/tcl_street_names.csv
+pipeline/data/street_aliases.csv
+pipeline/data/highway_aliases.csv
+
+# --- Web runtime data ---
+web/public/data/*.geojson
