@@ -1,6 +1,5 @@
 """Tests for intersection name normalization."""
 
-from pathlib import Path
 
 import geopandas as gpd
 import pytest

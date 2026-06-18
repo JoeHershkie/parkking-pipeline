@@ -1,15 +1,13 @@
 """Tests for failure_ledger.csv schema and record_failure."""
 
 import csv
-from pathlib import Path
 
+from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
 from parking_pipeline.failure_ledger import (  # noqa: E402
     LEDGER_COLUMNS,
-    LEDGER_EXCLUDED_REASON_CODES,
     clear_stage,
     record_failure,
 )
-from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
 
 
 def test_record_failure_stores_between_parsed_input(tmp_path, monkeypatch) -> None:

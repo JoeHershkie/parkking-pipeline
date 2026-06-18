@@ -1,12 +1,19 @@
 """Tests for resolve_rows stage."""
 
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from parking_pipeline.parse_format import highway_from_row, resolve_columns_for_row, row_to_parsed  # noqa: E402
-from parking_pipeline.resolve_rows import RESOLVE_STREET_NOT_FOUND, _init_resolve_index, resolve_rows  # noqa: E402
+from parking_pipeline.parse_format import (  # noqa: E402
+    highway_from_row,
+    resolve_columns_for_row,
+    row_to_parsed,
+)
+from parking_pipeline.resolve_rows import (  # noqa: E402
+    RESOLVE_STREET_NOT_FOUND,
+    _init_resolve_index,
+    resolve_rows,
+)
 
 
 @pytest.fixture(scope='module')

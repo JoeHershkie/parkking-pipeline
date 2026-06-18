@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 import geopandas as gpd
-import pytest
 import pyproj
+import pytest
 from shapely.geometry import LineString, Point
 from shapely.ops import transform
 

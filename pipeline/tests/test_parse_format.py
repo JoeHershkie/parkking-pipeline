@@ -1,6 +1,5 @@
 """Tests for parse validation and norm columns."""
 
-from pathlib import Path
 
 import pytest
 

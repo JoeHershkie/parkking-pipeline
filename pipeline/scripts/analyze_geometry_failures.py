@@ -2,10 +2,7 @@
 """Analysis of GEOMETRY_ERROR (zero-length segment) rows in failure_ledger.csv."""
 from __future__ import annotations
 
-import math
-import re
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Any
 

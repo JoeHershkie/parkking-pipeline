@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from .tcl_highway_key import tcl_highway_key
 from . import tcl_highway_resolve as thr
 
 _GENERIC_LANE_RE = re.compile(r'^lane$', re.I)
@@ -228,6 +227,7 @@ def _lazy_street_graphs() -> dict:
         return _STREET_GRAPHS_CACHE
     try:
         import geopandas as gpd
+
         from . import geo_cache as gc
         from . import tcl_graph as tg
         from .paths import data_path
@@ -506,7 +506,7 @@ def resolve_lane_legal(
 
     cross_keys = _resolve_cross_keys(between, parsed, all_phrases)
     # Other phrase anchors are crosses for this phrase.
-    phrase_cross = [
+    _phrase_cross = [
         ck
         for ck in cross_keys
         if ck != thr.resolve_tcl_highway(phrase.anchor)

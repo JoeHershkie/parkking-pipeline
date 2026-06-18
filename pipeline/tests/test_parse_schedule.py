@@ -1,11 +1,9 @@
 """Tests for schedule_format / parse_schedule."""
 
 import json
-from pathlib import Path
-
-import pytest
 
 import pandas as pd
+import pytest
 
 from parking_pipeline.parse_schedule import (  # noqa: E402
     SCHEDULE_EMPTY,

@@ -1,6 +1,5 @@
 """Integration checks for highway leg strip + component-qualified blocks."""
 
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -13,7 +12,6 @@ pytest.importorskip('geopandas')
 from parking_pipeline import geometry_engine as ge  # noqa: E402
 from parking_pipeline.geo_indices import init_geo  # noqa: E402
 from parking_pipeline.paths import data_path  # noqa: E402
-from parking_pipeline.parse_format import row_to_parsed  # noqa: E402
 
 
 @pytest.fixture(scope='module', autouse=True)

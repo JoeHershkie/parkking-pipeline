@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 
 import geopandas as gpd
 import pytest

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 import pytest
 
 from parking_pipeline import intersection_index as ix

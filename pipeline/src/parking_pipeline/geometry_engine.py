@@ -10,13 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 import geopandas as gpd
 import pandas as pd
 
-from .failure_ledger import clear_stage, record_failure
 from . import geo_indices
-from .geo_indices import init_geo, warm_intersection_index_from_dataframe
-from . import geo_slice
-from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
-from .paths import data_path
-from .schedule_format import schedule_from_json
+from .failure_ledger import clear_stage, record_failure
 
 # Re-export for scripts and tests that import geometry_engine as ge.
 from .geo_indices import (  # noqa: F401
@@ -29,12 +24,14 @@ from .geo_indices import (  # noqa: F401
     geo_ready,
     get_local_street_geometry,
     get_street_line_meters,
+    init_geo,
     intersections_gdf,
     project_to_gps,
     project_to_meters,
     street_graphs,
     street_index,
     street_metre_index,
+    warm_intersection_index_from_dataframe,
 )
 from .geo_slice import (  # noqa: F401
     AMBIGUOUS_INTERSECTION,
@@ -42,11 +39,11 @@ from .geo_slice import (  # noqa: F401
     DISCONNECTED_BLOCK,
     GEOMETRY_ERROR,
     INTERSECTION_NOT_FOUND,
-    SliceResult,
     STREET_NOT_FOUND,
     SUPPORTED_RULE_TYPES,
     UNSUPPORTED_RULE_TYPE,
     ZERO_SPAN,
+    SliceResult,
     _clamp_dist,
     _offset_point_dist,
     _terminus_dist_on_line,
@@ -54,11 +51,14 @@ from .geo_slice import (  # noqa: F401
     intersection_dist_with_qualifier,
     offset_sign,
     signed_offset_dist,
+    slice_between_distances,
     slice_block_path,
     slice_block_to_terminus_path,
-    slice_between_distances,
     slice_street,
 )
+from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
+from .paths import data_path
+from .schedule_format import schedule_from_json
 
 __all__ = [
     name for name in globals()

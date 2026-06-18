@@ -14,10 +14,10 @@ from shapely.ops import linemerge, transform
 
 from . import geo_cache as gc
 from . import intersection_index as ix_index
-from .parse_format import PARSE_COLUMNS, highway_from_row
-from . import tcl_highway_resolve as thr
-from .paths import data_path
 from . import tcl_graph as tg
+from . import tcl_highway_resolve as thr
+from .parse_format import PARSE_COLUMNS, highway_from_row
+from .paths import data_path
 from .tcl_graph import StreetGraph
 
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform

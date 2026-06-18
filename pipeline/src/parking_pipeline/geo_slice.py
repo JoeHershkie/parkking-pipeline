@@ -11,8 +11,8 @@ from shapely.geometry import LineString, MultiLineString
 from shapely.ops import substring, transform
 
 from . import geo_indices as gi
-from . import tcl_highway_resolve as thr
 from . import tcl_graph as tg
+from . import tcl_highway_resolve as thr
 from .tcl_graph import PathPick, StreetGraph
 
 STREET_NOT_FOUND = 'STREET_NOT_FOUND'

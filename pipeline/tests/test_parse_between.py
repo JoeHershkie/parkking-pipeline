@@ -1,6 +1,5 @@
 """Tests for parse_between misparse fixes."""
 
-from pathlib import Path
 
 import pytest
 

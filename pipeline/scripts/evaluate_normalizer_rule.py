@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from collections import Counter
-from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import geopandas as gpd
 import pandas as pd
@@ -16,7 +14,6 @@ from parking_pipeline import intersection_index as ix  # noqa: E402
 from parking_pipeline import tcl_graph as tg  # noqa: E402
 from parking_pipeline.intersection_normalize import (  # noqa: E402
     _REPLACEMENTS,
-    apply_street_alias,
     clear_alias_cache,
     normalize_intersection_street,
 )

@@ -27,7 +27,7 @@ def preprocess_between(text: str) -> str:
     )
     out = out.rstrip(' .')
     out = re.sub(
-        rf'\b(north|south|east|west)-(north|south|east|west)\b',
+        r'\b(north|south|east|west)-(north|south|east|west)\b',
         r'\1\2',
         out,
         flags=re.IGNORECASE,
@@ -113,7 +113,7 @@ def preprocess_between(text: str) -> str:
         flags=re.IGNORECASE,
     )
     out = re.sub(
-        rf'\b(south|north|east|west)/(south|north|east|west)\b',
+        r'\b(south|north|east|west)/(south|north|east|west)\b',
         r'\1 and \2',
         out,
         flags=re.IGNORECASE,
@@ -125,14 +125,14 @@ def preprocess_between(text: str) -> str:
         flags=re.IGNORECASE,
     )
     if not re.search(
-        rf'\bmetres\s+(?:south|north)\s+and\s+(?-i:[A-Z])'
-        rf'(?:[A-Za-z\'.,-]+\s+)*'
+        r'\bmetres\s+(?:south|north)\s+and\s+(?-i:[A-Z])'
+        r'(?:[A-Za-z\'.,-]+\s+)*'
         r'(?:street|st|avenue|ave|road|rd|drive|dr|boulevard|blvd|crescent|cres|court|ct|way|gate|grove|lane|ln)\b',
         out,
         flags=re.IGNORECASE,
     ):
         out = re.sub(
-            rf'\bmetres\s+(south|north)\s+and\s+((?-i:[A-Z])[A-Za-z\'.,-]*)',
+            r'\bmetres\s+(south|north)\s+and\s+((?-i:[A-Z])[A-Za-z\'.,-]*)',
             r'metres \1 and east of \2',
             out,
             flags=re.IGNORECASE,

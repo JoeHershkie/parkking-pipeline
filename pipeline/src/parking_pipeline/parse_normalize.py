@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 
 from .between_patterns import (
-    ANCHOR_FIELDS,
     A_POINT_OPPOSITE_LIMIT_RE,
     A_POINT_OPPOSITE_RE,
+    ANCHOR_FIELDS,
     METRIC_OF_STREET_RE,
     METRIC_ONLY_RE,
     TERMINUS_ANCHOR_RE,

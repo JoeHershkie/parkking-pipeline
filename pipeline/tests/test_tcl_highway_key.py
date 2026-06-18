@@ -1,6 +1,5 @@
 """Tests for TCL street-index highway key normalization."""
 
-from pathlib import Path
 
 from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 

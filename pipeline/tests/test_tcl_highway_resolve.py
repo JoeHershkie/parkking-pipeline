@@ -1,6 +1,5 @@
 """Tests for bylaw Highway → TCL legal name resolution."""
 
-from pathlib import Path
 
 from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
 from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402

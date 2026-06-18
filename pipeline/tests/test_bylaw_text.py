@@ -1,6 +1,5 @@
 """Tests for bylaw_text.preprocess_between."""
 
-from pathlib import Path
 
 import pytest
 

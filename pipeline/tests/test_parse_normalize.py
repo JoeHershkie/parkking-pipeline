@@ -1,11 +1,10 @@
 """Tests for parse_normalize."""
 
-from pathlib import Path
 
 import pytest
 
-from parking_pipeline.parse_normalize import normalize_anchor_phrase, normalize_parsed  # noqa: E402
 from parking_pipeline.parse_format import validate_parsed  # noqa: E402
+from parking_pipeline.parse_normalize import normalize_anchor_phrase, normalize_parsed  # noqa: E402
 
 
 @pytest.mark.parametrize(

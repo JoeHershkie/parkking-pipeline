@@ -35,18 +35,31 @@ def main() -> int:
         default=280,
         help='Minimum cohort rows that must parse+validate (default 280)',
     )
+    parser.add_argument(
+        '--input',
+        type=Path,
+        default=None,
+        help='Parse all Between rows from this CSV (for CI sample fixtures)',
+    )
     args = parser.parse_args()
 
-    triage = pd.read_csv(data_path('failure_triage.csv'))
-    cohort = triage[
-        (triage['reason_code'] == 'PARSE_NO_MATCH')
-        & (triage['fix_hint'] == COHORT_HINT)
-    ]
+    if args.input is not None:
+        cohort = pd.read_csv(args.input)
+        cohort = cohort.rename(columns=str.lower)
+    else:
+        triage = pd.read_csv(data_path('failure_triage.csv'))
+        cohort = triage[
+            (triage['reason_code'] == 'PARSE_NO_MATCH')
+            & (triage['fix_hint'] == COHORT_HINT)
+        ]
     parsed_ok = 0
     failures: list[tuple[str, str, str]] = []
 
     for _, row in cohort.iterrows():
-        text = _between_text(row)
+        if args.input is not None:
+            text = preprocess_between(str(row.get('between', '')))
+        else:
+            text = _between_text(row)
         parsed = parse_between(text) if text else None
         if parsed is None:
             failures.append((str(row.get('parse_between_class', '')), 'no_match', text[:120]))

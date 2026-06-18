@@ -340,7 +340,6 @@ def build_index_from_csv(
             legal = (row.get('linear_name_full_legal') or '').strip()
             if not legal:
                 continue
-            legal_key = tcl_highway_key(legal)
             for base in (row.get('linear_name_base') or '').split(' | '):
                 base = base.strip()
                 if base:

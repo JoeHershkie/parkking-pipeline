@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 
-from parking_pipeline.paths import data_path  # noqa: E402
 from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
+from parking_pipeline.paths import data_path  # noqa: E402
 from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Iterable
 
 import ahocorasick
 import geopandas as gpd
 
 from .intersection_normalize import (
-    apply_street_alias,
     expand_cross_lookup_names,
     tcl_search_tokens,
 )

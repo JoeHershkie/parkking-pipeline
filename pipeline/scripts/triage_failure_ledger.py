@@ -18,8 +18,9 @@ from analyze_intersection_failures import (  # noqa: E402
     attribution,
     categorize_cross,
 )
-from parking_pipeline.failure_ledger import LEDGER_EXCLUDED_REASON_CODES  # noqa: E402
+
 from parking_pipeline.bylaw_text import preprocess_between  # noqa: E402
+from parking_pipeline.failure_ledger import LEDGER_EXCLUDED_REASON_CODES  # noqa: E402
 from parking_pipeline.paths import data_path  # noqa: E402
 
 _FIELD_RE = re.compile(r'^(start|end|offset)_intersection=(.*)$', re.I)
@@ -201,7 +202,6 @@ def assign_fix_tier(row: pd.Series, alias_names: set[str]) -> tuple[str, str, st
     """Return (fix_tier, fix_category, fix_hint)."""
     stage = str(row.get('stage', ''))
     reason = str(row.get('reason_code', ''))
-    between = row.get('between', '')
     highway = str(row.get('highway', '') or '')
     detail = str(row.get('detail', '') or '')
 

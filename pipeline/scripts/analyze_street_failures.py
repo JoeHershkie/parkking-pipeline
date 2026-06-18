@@ -12,6 +12,7 @@ import pandas as pd
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
+from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
 from parking_pipeline.highway_categorize import categorize_highway  # noqa: E402
 from parking_pipeline.lane_highway_resolve import (  # noqa: E402
     infer_lane_phrase_from_between,
@@ -19,7 +20,6 @@ from parking_pipeline.lane_highway_resolve import (  # noqa: E402
     resolve_lane_highway,
 )
 from parking_pipeline.paths import data_path  # noqa: E402
-from parking_pipeline import tcl_highway_resolve as thr  # noqa: E402
 from parking_pipeline.tcl_highway_key import tcl_highway_key  # noqa: E402
 
 

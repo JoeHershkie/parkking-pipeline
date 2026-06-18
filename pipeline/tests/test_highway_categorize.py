@@ -1,6 +1,5 @@
 """Tests for highway categorization buckets."""
 
-from pathlib import Path
 
 from parking_pipeline.highway_categorize import categorize_highway  # noqa: E402
 

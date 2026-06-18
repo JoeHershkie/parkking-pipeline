@@ -4,24 +4,40 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import pandas as pd
 
 from .between_patterns import (
     A_POINT_RE,
-    APPROX as _APPROX,
-    COMPASS as _COMPASS,
-    COMPASS_END as _COMPASS_END,
-    COMPOUND_DIR as _COMPOUND_DIR,
-    DIR as _DIR,
-    FURTHER_TAIL as _FURTHER_TAIL,
-    METRES as _METRES,
-    OPT_PAREN_IN_ANCHOR as _OPT_PAREN_IN_ANCHOR,
     PAREN_QUALIFIER_RE,
     POINT_METRES_FRAGMENT_RE,
     STREET_END_RE,
+)
+from .between_patterns import (
+    APPROX as _APPROX,
+)
+from .between_patterns import (
+    COMPASS as _COMPASS,
+)
+from .between_patterns import (
+    COMPASS_END as _COMPASS_END,
+)
+from .between_patterns import (
+    COMPOUND_DIR as _COMPOUND_DIR,
+)
+from .between_patterns import (
+    DIR as _DIR,
+)
+from .between_patterns import (
+    FURTHER_TAIL as _FURTHER_TAIL,
+)
+from .between_patterns import (
+    METRES as _METRES,
+)
+from .between_patterns import (
+    OPT_PAREN_IN_ANCHOR as _OPT_PAREN_IN_ANCHOR,
 )
 from .bylaw_text import preprocess_between
 from .failure_ledger import clear_stage, record_failure
@@ -31,12 +47,14 @@ from .parse_format import (
     parsed_dict_to_columns,
     validate_parsed,
 )
-from .paths import data_path
 from .parse_normalize import (
     normalize_anchor_phrase,
     normalize_parsed,
+)
+from .parse_normalize import (
     primary_compass as _primary_compass,
 )
+from .paths import data_path
 from .schedule_format import SCHEDULE_EXPORT_COLUMNS
 
 __all__ = (

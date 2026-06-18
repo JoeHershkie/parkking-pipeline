@@ -1,6 +1,5 @@
 """Tests for Ontario public holiday helper."""
 
-from pathlib import Path
 
 from parking_pipeline.public_holidays import is_public_holiday  # noqa: E402
 

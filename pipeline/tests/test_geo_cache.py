@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from parking_pipeline import geo_cache as gc
-from parking_pipeline import intersection_index as ix
-from parking_pipeline.paths import cache_dir
 
 
 @pytest.fixture(autouse=True)

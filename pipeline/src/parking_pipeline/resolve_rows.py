@@ -7,6 +7,7 @@ from collections import Counter
 
 import pandas as pd
 
+from . import tcl_highway_resolve as thr
 from .failure_ledger import clear_stage, record_failure
 from .parse_format import (
     RESOLVE_COLUMNS,
@@ -17,7 +18,6 @@ from .parse_format import (
 )
 from .paths import data_path
 from .tcl_highway_key import tcl_highway_key
-from . import tcl_highway_resolve as thr
 
 RESOLVE_STREET_NOT_FOUND = 'RESOLVE_STREET_NOT_FOUND'
 

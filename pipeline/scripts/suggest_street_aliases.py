@@ -16,9 +16,13 @@ import pandas as pd
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
-from parking_pipeline import tcl_graph as tg  # noqa: E402
 from analyze_intersection_failures import categorize_cross  # noqa: E402
-from parking_pipeline.intersection_normalize import apply_street_alias, normalize_intersection_street  # noqa: E402
+
+from parking_pipeline import tcl_graph as tg  # noqa: E402
+from parking_pipeline.intersection_normalize import (  # noqa: E402
+    apply_street_alias,
+    normalize_intersection_street,
+)
 from parking_pipeline.paths import data_path  # noqa: E402
 
 MIN_DESC_HITS = 5
