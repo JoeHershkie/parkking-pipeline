@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
+import logging
 import subprocess
 import sys
 from pathlib import Path
+
+from .log_config import add_verbose_arg, setup_logging
+
+log = logging.getLogger(__name__)
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = PIPELINE_ROOT / 'scripts'
@@ -28,23 +34,23 @@ ANALYSIS_SCRIPTS = (
 def run_module(module: str) -> int:
     """Run a pipeline stage module and return its exit code."""
     try:
-        print(f'Running {module}...')
+        log.info('Running %s...', module)
         result = subprocess.run(
             [sys.executable, '-m', module],
             check=True,
             capture_output=True,
             text=True,
         )
-        print(f'✓ {module} completed successfully')
+        log.info('✓ %s completed successfully', module)
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout.rstrip())
         return 0
     except subprocess.CalledProcessError as exc:
-        print(f'✗ {module} failed with exit code {exc.returncode}')
+        log.error('✗ %s failed with exit code %s', module, exc.returncode)
         if exc.stdout:
-            print('STDOUT:', exc.stdout)
+            log.error('STDOUT: %s', exc.stdout.rstrip())
         if exc.stderr:
-            print('STDERR:', exc.stderr)
+            log.error('STDERR: %s', exc.stderr.rstrip())
         return exc.returncode
 
 
@@ -52,45 +58,50 @@ def run_script(script_name: str) -> int:
     """Run an analysis script from pipeline/scripts/."""
     script_path = SCRIPTS / script_name
     try:
-        print(f'Running {script_name}...')
+        log.info('Running %s...', script_name)
         result = subprocess.run(
             [sys.executable, str(script_path)],
             check=True,
             capture_output=True,
             text=True,
         )
-        print(f'✓ {script_name} completed successfully')
+        log.info('✓ %s completed successfully', script_name)
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout.rstrip())
         return 0
     except subprocess.CalledProcessError as exc:
-        print(f'✗ {script_name} failed with exit code {exc.returncode}')
+        log.error('✗ %s failed with exit code %s', script_name, exc.returncode)
         if exc.stdout:
-            print('STDOUT:', exc.stdout)
+            log.error('STDOUT: %s', exc.stdout.rstrip())
         if exc.stderr:
-            print('STDERR:', exc.stderr)
+            log.error('STDERR: %s', exc.stderr.rstrip())
         return exc.returncode
 
 
-def main() -> int:
-    print('Starting full run of parking pipeline...\n')
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args(argv)
+    setup_logging(verbose=args.verbose)
+
+    log.info('Starting full run of parking pipeline...\n')
 
     failed: list[str] = []
     for module in PIPELINE_MODULES:
         if run_module(module) != 0:
             failed.append(module)
-        print()
+        log.info('')
 
     for script_name in ANALYSIS_SCRIPTS:
         if run_script(script_name) != 0:
             failed.append(script_name)
-        print()
+        log.info('')
 
-    print('=' * 50)
+    log.info('=' * 50)
     if not failed:
-        print('All scripts completed successfully!')
+        log.info('All scripts completed successfully!')
         return 0
-    print(f'Failed: {", ".join(failed)}')
+    log.error('Failed: %s', ', '.join(failed))
     return 1
 
 

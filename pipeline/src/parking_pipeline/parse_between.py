@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter
 from collections.abc import Callable
@@ -56,6 +57,8 @@ from .parse_normalize import (
 )
 from .paths import data_path
 from .schedule_format import SCHEDULE_EXPORT_COLUMNS
+
+log = logging.getLogger(__name__)
 
 __all__ = (
     'PARSE_NO_MATCH',
@@ -814,23 +817,32 @@ def _print_summary(
     failure_counts: Counter,
 ) -> None:
     pct = lambda n: round((n / total) * 100, 1) if total else 0.0
-    print(f'Total Rows: {total}')
-    print(f'Parsed: {success_count} ({pct(success_count)}%)')
-    print(f'  Excluded by parse failures: {parse_excluded}')
+    log.info(f'Total Rows: {total}')
+    log.info(f'Parsed: {success_count} ({pct(success_count)}%)')
+    log.info(f'  Excluded by parse failures: {parse_excluded}')
     if failure_counts:
-        print('  Parse-stage failures (see failure_ledger.csv):')
+        log.info('  Parse-stage failures (see failure_ledger.csv):')
         for code, count in failure_counts.most_common():
-            print(f'    {code}: {count}')
+            log.info(f'    {code}: {count}')
 
 
 def main() -> None:
-    print('Parsing Between column...')
+    import argparse
+
+    from .log_config import add_verbose_arg, setup_logging
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args()
+    setup_logging(verbose=args.verbose)
+
+    log.info('Parsing Between column...')
     df = pd.read_csv(data_path('clean_parking_targets.csv'))
 
     clear_stage('parse')
     schedule_by_id = _load_schedule_by_id()
     if not schedule_by_id:
-        print('Warning: parsed_schedules.csv not found; run parse_schedule.py first.')
+        log.info('Warning: parsed_schedules.csv not found; run parse_schedule.py first.')
     successes, failure_counts = parse_rows(df, schedule_by_id=schedule_by_id or None)
     parse_excluded = len(df) - len(successes)
 

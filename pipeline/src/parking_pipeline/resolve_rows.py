@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from collections import Counter
 
 import pandas as pd
@@ -18,6 +19,8 @@ from .parse_format import (
 )
 from .paths import data_path
 from .tcl_highway_key import tcl_highway_key
+
+log = logging.getLogger(__name__)
 
 RESOLVE_STREET_NOT_FOUND = 'RESOLVE_STREET_NOT_FOUND'
 
@@ -74,16 +77,25 @@ def resolve_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
 
 def _print_summary(total: int, success_count: int, failure_counts: Counter) -> None:
     pct = lambda n: round((n / total) * 100, 1) if total else 0.0
-    print(f'Total Rows: {total}')
-    print(f'Resolved: {success_count} ({pct(success_count)}%)')
+    log.info(f'Total Rows: {total}')
+    log.info(f'Resolved: {success_count} ({pct(success_count)}%)')
     if failure_counts:
-        print('  Resolve-stage failures (see failure_ledger.csv):')
+        log.info('  Resolve-stage failures (see failure_ledger.csv):')
         for code, count in failure_counts.most_common():
-            print(f'    {code}: {count}')
+            log.info(f'    {code}: {count}')
 
 
 def main() -> None:
-    print('Resolving Highway values to TCL keys...')
+    import argparse
+
+    from .log_config import add_verbose_arg, setup_logging
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args()
+    setup_logging(verbose=args.verbose)
+
+    log.info('Resolving Highway values to TCL keys...')
     path = data_path('parsed_successes.csv')
     df = pd.read_csv(path)
 

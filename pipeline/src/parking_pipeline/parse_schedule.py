@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 
 import pandas as pd
@@ -14,6 +15,8 @@ from .schedule_format import (
     parse_schedule,
     schedule_to_json,
 )
+
+log = logging.getLogger(__name__)
 
 SCHEDULE_EMPTY = 'SCHEDULE_EMPTY'
 EMPTY_TIMES_DEFAULT = 'Anytime'
@@ -65,19 +68,28 @@ def parse_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
 
 
 def _print_summary(total: int, df: pd.DataFrame, failure_counts: Counter) -> None:
-    print(f'Total rows: {total}')
-    print(f'Schedule rows written: {len(df)}')
+    log.info(f'Total rows: {total}')
+    log.info(f'Schedule rows written: {len(df)}')
     if failure_counts:
-        print('  Schedule-stage ledger failures (malformed input):')
+        log.info('  Schedule-stage ledger failures (malformed input):')
         for code, count in failure_counts.most_common():
-            print(f'    {code}: {count}')
+            log.info(f'    {code}: {count}')
     if len(df):
-        print('  schedule_status:')
-        print(df['schedule_status'].value_counts().to_string())
+        log.info('  schedule_status:')
+        log.info(df['schedule_status'].value_counts().to_string())
 
 
 def main() -> None:
-    print('Parsing Prohibited Times and/or Days...')
+    import argparse
+
+    from .log_config import add_verbose_arg, setup_logging
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args()
+    setup_logging(verbose=args.verbose)
+
+    log.info('Parsing Prohibited Times and/or Days...')
     df = pd.read_csv(data_path('clean_parking_targets.csv'))
 
     clear_stage('schedule')

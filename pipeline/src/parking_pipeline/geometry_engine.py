@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections import Counter
@@ -59,6 +60,8 @@ from .geo_slice import (  # noqa: F401
 from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
 from .paths import data_path
 from .schedule_format import schedule_from_json
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     name for name in globals()
@@ -180,68 +183,71 @@ def _print_timing_summary(
     rows_per_sec = row_count / slice_sec if slice_sec > 0 else 0.0
     worker_label = 'sequential' if workers <= 1 else f'{workers} workers'
 
-    print("   Timing:")
-    print(f"     TCL intersections load: {_format_duration(timing.get('intersections_load', 0.0))}")
-    print(f"     TCL streets load:       {_format_duration(timing.get('streets_load', 0.0))}")
+    log.info("   Timing:")
+    log.info(f"     TCL intersections load: {_format_duration(timing.get('intersections_load', 0.0))}")
+    log.info(f"     TCL streets load:       {_format_duration(timing.get('streets_load', 0.0))}")
     graphs_sec = timing.get('street_graphs', 0.0)
     if timing.get('street_graphs_cache'):
-        print("     Street graphs:          (disk cache)")
+        log.info("     Street graphs:          (disk cache)")
     else:
-        print(f"     Street graph build:     {_format_duration(graphs_sec)}")
-    print(f"     Street index build:     {_format_duration(timing.get('street_index', 0.0))}")
+        log.info(f"     Street graph build:     {_format_duration(graphs_sec)}")
+    log.info(f"     Street index build:     {_format_duration(timing.get('street_index', 0.0))}")
     warm = timing.get('intersection_warm', 0.0)
     if warm > 0 or timing.get('intersection_warm_cache'):
         warm_label = "(disk cache)" if timing.get('intersection_warm_cache') else _format_duration(warm)
-        print(f"     Intersection warm:      {warm_label}")
-    print(f"     Startup (import):       {_format_duration(startup)}")
-    print(f"     CSV load:               {_format_duration(csv_load)}")
-    print(
+        log.info(f"     Intersection warm:      {warm_label}")
+    log.info(f"     Startup (import):       {_format_duration(startup)}")
+    log.info(f"     CSV load:               {_format_duration(csv_load)}")
+    log.info(
         f"     Slice ({row_count} rows, {worker_label}): "
         f"{_format_duration(slice_sec)} ({rows_per_sec:.1f} rows/s)"
     )
     if export_sec > 0:
-        print(f"     Export GeoJSON:         {_format_duration(export_sec)}")
-    print(f"     Total (__main__):       {_format_duration(main_total)}")
-    print(f"     Total (incl. import):   {_format_duration(startup + main_total)}")
+        log.info(f"     Export GeoJSON:         {_format_duration(export_sec)}")
+    log.info(f"     Total (__main__):       {_format_duration(main_total)}")
+    log.info(f"     Total (incl. import):   {_format_duration(startup + main_total)}")
 
 
 if __name__ == "__main__":
+    from .log_config import setup_logging
+
+    setup_logging()
     main_start = time.perf_counter()
 
     init_geo()
 
-    print("3. Loading Parsed Successes CSV...")
+    log.info("3. Loading Parsed Successes CSV...")
     t0 = time.perf_counter()
     df = pd.read_csv(data_path('parsed_successes.csv'))
     if 'parse_valid' in df.columns:
         valid_mask = df['parse_valid'].map(_parse_valid_flag)
         skipped = int((~valid_mask).sum())
         if skipped:
-            print(f'   Skipping {skipped} rows with parse_valid=false')
+            log.info(f'   Skipping {skipped} rows with parse_valid=false')
         df = df.loc[valid_mask].copy()
     if 'resolve_valid' in df.columns:
         resolve_mask = df['resolve_valid'].map(_resolve_valid_flag)
         skipped = int((~resolve_mask).sum())
         if skipped:
-            print(f'   Skipping {skipped} rows with resolve_valid=false')
+            log.info(f'   Skipping {skipped} rows with resolve_valid=false')
         df = df.loc[resolve_mask].copy()
     csv_load_sec = time.perf_counter() - t0
     batch_df = _geo_batch_limit(df)
-    print(f"   Processing {len(batch_df)} of {len(df)} rows.")
+    log.info(f"   Processing {len(batch_df)} of {len(df)} rows.")
 
-    print("   Warming intersection index from CSV...")
+    log.info("   Warming intersection index from CSV...")
     t0 = time.perf_counter()
     warmed = warm_intersection_index_from_dataframe(batch_df)
     geo_indices._timing['intersection_warm'] = time.perf_counter() - t0
     if geo_indices._timing.get('intersection_warm_cache'):
-        print(f"   Loaded {warmed} intersection tokens from cache.")
+        log.info(f"   Loaded {warmed} intersection tokens from cache.")
     else:
-        print(f"   Indexed {warmed} intersection search tokens (saved to cache).")
+        log.info(f"   Indexed {warmed} intersection search tokens (saved to cache).")
 
     clear_stage('geo')
     results: list[dict] = []
     failure_counts = Counter()
-    print("4. Slicing Streets Locally...")
+    log.info("4. Slicing Streets Locally...")
 
     workers = _geo_workers()
     columns = batch_df.columns
@@ -270,12 +276,12 @@ if __name__ == "__main__":
             _apply_row_outcome(*_process_geo_row(args))
     slice_sec = time.perf_counter() - t0
 
-    print(f"\n5. Exporting {len(results)} zones to GeoJSON...")
-    print(f"   Successes: {len(results)}")
+    log.info(f"\n5. Exporting {len(results)} zones to GeoJSON...")
+    log.info(f"   Successes: {len(results)}")
     if failure_counts:
-        print("   Geo failures by reason:")
+        log.info("   Geo failures by reason:")
         for code, count in failure_counts.most_common():
-            print(f"     {code}: {count}")
+            log.info(f"     {code}: {count}")
 
     export_sec = 0.0
     if results:
@@ -285,7 +291,7 @@ if __name__ == "__main__":
         out_path = data_path('final_parking_map.geojson')
         gdf.to_file(out_path, driver="GeoJSON")
         export_sec = time.perf_counter() - t0
-        print(f"Done! Open '{out_path}' to see your local work.")
+        log.info(f"Done! Open '{out_path}' to see your local work.")
 
     main_total = time.perf_counter() - main_start
     _print_timing_summary(

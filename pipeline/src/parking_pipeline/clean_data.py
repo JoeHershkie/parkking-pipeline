@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import logging
 import re
 import sys
 from collections import Counter
@@ -12,6 +13,8 @@ import pandas as pd
 
 from .failure_ledger import clear_stage, record_failure
 from .paths import data_path
+
+log = logging.getLogger(__name__)
 
 # --- Schedule allowlist (exact scheduleName strings; no substring matching) ---
 
@@ -212,26 +215,35 @@ def _print_summary(
     before_dedup: int,
     failure_counts: Counter,
 ) -> None:
-    print(f'Wrote {len(clean_df)} rows to clean_parking_targets.csv')
-    print(f'  Excluded by unpack failures: {unpack_excluded}')
+    log.info(f'Wrote {len(clean_df)} rows to clean_parking_targets.csv')
+    log.info(f'  Excluded by unpack failures: {unpack_excluded}')
     if dup_dropped:
-        print(f'  Duplicates removed: {dup_dropped} ({before_dedup} → {len(clean_df)})')
+        log.info(f'  Duplicates removed: {dup_dropped} ({before_dedup} → {len(clean_df)})')
     if failure_counts:
-        print('  Clean-stage failures (see failure_ledger.csv):')
+        log.info('  Clean-stage failures (see failure_ledger.csv):')
         for code, count in failure_counts.most_common():
-            print(f'    {code}: {count}')
-    print('Done! Clean CSV created.')
+            log.info(f'    {code}: {count}')
+    log.info('Done! Clean CSV created.')
 
 
 def main() -> None:
+    import argparse
+
+    from .log_config import add_verbose_arg, setup_logging
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args()
+    setup_logging(verbose=args.verbose)
+
     active = load_active_rules()
     if active.empty:
-        print('Wait! The filters removed all rows. Check the exact text in your CSV columns.')
+        log.error('Wait! The filters removed all rows. Check the exact text in your CSV columns.')
         sys.exit(1)
 
-    print(f'Success! Found {len(active)} active curb rules.')
-    print(active['scheduleName'].map(schedule_category).value_counts().to_string())
-    print('Unpacking nested data... (this might take a few seconds)')
+    log.info(f'Success! Found {len(active)} active curb rules.')
+    log.info(active['scheduleName'].map(schedule_category).value_counts().to_string())
+    log.info('Unpacking nested data... (this might take a few seconds)')
 
     clear_stage('clean')
     clean_df, failure_counts = unpack_rows(active)
