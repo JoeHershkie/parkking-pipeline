@@ -1,22 +1,34 @@
 # --- Generated pipeline outputs (regenerate locally) ---
-/data/toronto_raw_parking_dump.csv
-/data/clean_parking_targets.csv
-/data/parsed_successes.csv
-/data/failure_ledger.csv
-/data/failure_triage.csv
-/data/failure_triage_summary.json
-/data/final_parking_map.geojson
+data/toronto_raw_parking_dump.csv
+data/clean_parking_targets.csv
+data/parsed_successes.csv
+data/parsed_schedules.csv
+data/failure_ledger.csv
+data/failure_triage.csv
+data/failure_triage_summary.json
+data/final_parking_map.geojson
+data/intersection_failure_analysis.csv
+data/street_failure_analysis.csv
+data/geometry_failure_analysis.csv
 
-# --- External spatial sources (download locally) ---
-/data/tcl_streets.geojson
-/data/tcl_intersections.geojson
-/data/.geo_cache/
+# --- External spatial sources (download locally; see README) ---
+data/tcl_streets.geojson
+data/tcl_intersections.geojson
+data/tcl_street_names.csv
+data/street_aliases.csv
+data/highway_aliases.csv
+data/.geo_cache/
+
+# Legacy paths at repo root (pre-data/ layout)
+/tcl_streets.geojson
+/tcl_intersections.geojson
 
 # --- Python / OS / IDE ---
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 .DS_Store
 .idea/
-
-data/
+.vscode/
+.pytest_cache/
