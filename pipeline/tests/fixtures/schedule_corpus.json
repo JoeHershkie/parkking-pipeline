@@ -1,0 +1,694 @@
+{
+  "version": 1,
+  "description": "Shared schedule membership parity corpus (Python overlaps_membership)",
+  "cases": [
+    {
+      "id": "mon_fri_8_6__tue_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "Mon\u2013Fri 8am\u20136pm",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 480,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 20,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "mon_fri_8_6__sat_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "Mon\u2013Fri 8am\u20136pm",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 480,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 6,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 24,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "anytime_no_calendar__sat_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "anytime",
+        "source": "anytime",
+        "windows": []
+      },
+      "slot": {
+        "dayOfWeek": 6,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 24,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "anytime_winter_calendar__winter_jan",
+      "schedule": {
+        "v": 1,
+        "status": "anytime",
+        "source": "winter",
+        "windows": [],
+        "calendar": {
+          "monthRanges": [
+            {
+              "startMonth": 12,
+              "startDay": 1,
+              "endMonth": 3,
+              "endDay": 31
+            }
+          ]
+        }
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 600,
+        "month": 1,
+        "dayOfMonth": 15,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "anytime_winter_calendar__summer_jul",
+      "schedule": {
+        "v": 1,
+        "status": "anytime",
+        "source": "winter",
+        "windows": [],
+        "calendar": {
+          "monthRanges": [
+            {
+              "startMonth": 12,
+              "startDay": 1,
+              "endMonth": 3,
+              "endDay": 31
+            }
+          ]
+        }
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 600,
+        "month": 7,
+        "dayOfMonth": 15,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "failed_seasonal__tue_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "failed",
+        "source": "Apr\u2013Nov",
+        "windows": []
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 20,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "overnight_crosses_midnight__mon_11pm",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "overnight",
+        "windows": [
+          {
+            "days": [
+              1
+            ],
+            "startMinute": 1320,
+            "endMinute": 360,
+            "crossesMidnight": true
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 1,
+        "minuteOfDay": 1380,
+        "month": 1,
+        "dayOfMonth": 1,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "overnight_crosses_midnight__mon_5am",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "overnight",
+        "windows": [
+          {
+            "days": [
+              1
+            ],
+            "startMinute": 1320,
+            "endMinute": 360,
+            "crossesMidnight": true
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 1,
+        "minuteOfDay": 300,
+        "month": 1,
+        "dayOfMonth": 1,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "overnight_crosses_midnight__mon_noon",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "overnight",
+        "windows": [
+          {
+            "days": [
+              1
+            ],
+            "startMinute": 1320,
+            "endMinute": 360,
+            "crossesMidnight": true
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 1,
+        "minuteOfDay": 720,
+        "month": 1,
+        "dayOfMonth": 1,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "weekday_except_holidays__canada_day_2025",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "4\u20136pm weekdays except holidays",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 960,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ],
+        "flags": {
+          "exceptPublicHolidays": true
+        }
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 1020,
+        "month": 7,
+        "dayOfMonth": 1,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "weekday_except_holidays__july_2_2025",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "4\u20136pm weekdays except holidays",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 960,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ],
+        "flags": {
+          "exceptPublicHolidays": true
+        }
+      },
+      "slot": {
+        "dayOfWeek": 3,
+        "minuteOfDay": 1020,
+        "month": 7,
+        "dayOfMonth": 2,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "inverted_sunday_holidays__sunday_jun_2025",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "anytime except Sun",
+        "inverted": true,
+        "windows": [
+          {
+            "days": [
+              0
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false
+          }
+        ],
+        "flags": {
+          "exceptPublicHolidays": true
+        }
+      },
+      "slot": {
+        "dayOfWeek": 0,
+        "minuteOfDay": 600,
+        "month": 6,
+        "dayOfMonth": 8,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "inverted_sunday_holidays__monday_jun_2025",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "anytime except Sun",
+        "inverted": true,
+        "windows": [
+          {
+            "days": [
+              0
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false
+          }
+        ],
+        "flags": {
+          "exceptPublicHolidays": true
+        }
+      },
+      "slot": {
+        "dayOfWeek": 1,
+        "minuteOfDay": 600,
+        "month": 6,
+        "dayOfMonth": 9,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "inverted_sunday_holidays__canada_day_2025",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "anytime except Sun",
+        "inverted": true,
+        "windows": [
+          {
+            "days": [
+              0
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false
+          }
+        ],
+        "flags": {
+          "exceptPublicHolidays": true
+        }
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 1020,
+        "month": 7,
+        "dayOfMonth": 1,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "winter_window_calendar__feb_10_winter",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "Dec\u2013Mar",
+        "windows": [
+          {
+            "days": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false,
+            "calendar": {
+              "monthRanges": [
+                {
+                  "startMonth": 12,
+                  "startDay": 1,
+                  "endMonth": 3,
+                  "endDay": 31
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 3,
+        "minuteOfDay": 720,
+        "month": 2,
+        "dayOfMonth": 10,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "winter_window_calendar__aug_10_summer",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "Dec\u2013Mar",
+        "windows": [
+          {
+            "days": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false,
+            "calendar": {
+              "monthRanges": [
+                {
+                  "startMonth": 12,
+                  "startDay": 1,
+                  "endMonth": 3,
+                  "endDay": 31
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 3,
+        "minuteOfDay": 720,
+        "month": 8,
+        "dayOfMonth": 10,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "partial_mon_fri__tue_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "partial",
+        "source": "partial",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 480,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ],
+        "unparsedClauses": [
+          "some other clause"
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 20,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "partial_mon_fri__sat_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "partial",
+        "source": "partial",
+        "windows": [
+          {
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "startMinute": 480,
+            "endMinute": 1080,
+            "crossesMidnight": false
+          }
+        ],
+        "unparsedClauses": [
+          "some other clause"
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 6,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 24,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "day_of_month_last__feb_29_leap",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "last days of month",
+        "windows": [
+          {
+            "days": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false,
+            "calendar": {
+              "dayOfMonthRanges": [
+                {
+                  "start": 28,
+                  "end": "last"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 0,
+        "minuteOfDay": 0,
+        "month": 2,
+        "dayOfMonth": 29,
+        "year": 2024
+      },
+      "expected": true
+    },
+    {
+      "id": "day_of_month_last__feb_28_non_leap",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "last days of month",
+        "windows": [
+          {
+            "days": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false,
+            "calendar": {
+              "dayOfMonthRanges": [
+                {
+                  "start": 28,
+                  "end": "last"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 0,
+        "minuteOfDay": 0,
+        "month": 2,
+        "dayOfMonth": 28,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "day_of_month_last__feb_27_non_leap",
+      "schedule": {
+        "v": 1,
+        "status": "ok",
+        "source": "last days of month",
+        "windows": [
+          {
+            "days": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "startMinute": 0,
+            "endMinute": 1439,
+            "crossesMidnight": false,
+            "calendar": {
+              "dayOfMonthRanges": [
+                {
+                  "start": 28,
+                  "end": "last"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "slot": {
+        "dayOfWeek": 0,
+        "minuteOfDay": 0,
+        "month": 2,
+        "dayOfMonth": 27,
+        "year": 2025
+      },
+      "expected": false
+    },
+    {
+      "id": "inverted_anytime_no_windows__tue_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "anytime",
+        "source": "inverted anytime",
+        "inverted": true,
+        "windows": []
+      },
+      "slot": {
+        "dayOfWeek": 2,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 20,
+        "year": 2025
+      },
+      "expected": true
+    },
+    {
+      "id": "inverted_anytime_no_windows__sat_3pm",
+      "schedule": {
+        "v": 1,
+        "status": "anytime",
+        "source": "inverted anytime",
+        "inverted": true,
+        "windows": []
+      },
+      "slot": {
+        "dayOfWeek": 6,
+        "minuteOfDay": 900,
+        "month": 5,
+        "dayOfMonth": 24,
+        "year": 2025
+      },
+      "expected": true
+    }
+  ]
+}
