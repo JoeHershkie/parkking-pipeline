@@ -41,6 +41,14 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "--cov=parking_pipeline --cov-report=term-missing --cov-fail-under=62"
+
+[tool.coverage.run]
+source = ["parking_pipeline"]
+
+[tool.coverage.report]
+fail_under = 62
+show_missing = true
 
 [tool.ruff]
 line-length = 100

@@ -38,7 +38,7 @@ jobs:
         run: ruff check src tests scripts
 
       - name: Pytest
-        run: pytest --cov=parking_pipeline --cov-report=term-missing
+        run: pytest
 
       - name: Parse cohort regression (sample)
         run: |
