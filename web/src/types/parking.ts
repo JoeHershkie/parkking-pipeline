@@ -8,6 +8,15 @@ export type ScheduleCategory =
   | 'no_standing'
   | 'restricted_periods'
 
+export interface ParkingMapMetadata {
+  generated_at?: string
+  pipeline_version?: string
+  feature_count?: number
+  input_row_count?: number
+  tcl_streets_mtime?: string | null
+  tcl_intersections_mtime?: string | null
+}
+
 export interface ParkingProperties {
   Highway: string
   Rule: string
@@ -28,7 +37,9 @@ export type ParkingFeature = Feature<LineString, ParkingProperties>
 export type ParkingFeatureCollection = FeatureCollection<
   LineString,
   ParkingProperties
->
+> & {
+  metadata?: ParkingMapMetadata
+}
 
 export const PARKING_SOURCE_ID = 'parking'
 export const PARKING_LAYER_ID = 'parking-lines'

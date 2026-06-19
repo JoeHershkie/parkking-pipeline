@@ -8,7 +8,7 @@ import { RulePanel } from './components/RulePanel'
 import { SearchBar, type SelectedPlace } from './components/SearchBar'
 import { TimeFilterBar, type TimeFilterState } from './components/TimeFilterBar'
 import { slotFromDate } from './lib/schedule'
-import type { ParkingFeature, ParkingFeatureCollection } from './types/parking'
+import type { ParkingFeature, ParkingFeatureCollection, ParkingMapMetadata } from './types/parking'
 import './App.css'
 
 function formatClickLabel(lngLat: [number, number]): string {
@@ -23,6 +23,7 @@ function App() {
   const [clickLabel, setClickLabel] = useState<string | null>(null)
   const [searchStatus, setSearchStatus] = useState<string | null>(null)
   const [dataReady, setDataReady] = useState(false)
+  const [mapMetadata, setMapMetadata] = useState<ParkingMapMetadata | null>(null)
   const [timeFilter, setTimeFilter] = useState<TimeFilterState>(() => ({
     slot: slotFromDate(new Date()),
     endMinuteOfDay: null,
@@ -49,6 +50,7 @@ function App() {
 
   const handleDataLoaded = useCallback((data: ParkingFeatureCollection) => {
     setFeatureCount(data.features.length)
+    setMapMetadata(data.metadata ?? null)
     setDataReady(true)
   }, [])
 
@@ -134,6 +136,8 @@ function App() {
             visibleCount={visibleCount}
             slot={timeFilter.slot}
             endMinuteOfDay={effectiveEnd}
+            dataGeneratedAt={mapMetadata?.generated_at}
+            pipelineVersion={mapMetadata?.pipeline_version}
           />
         </div>
         <RulePanel rules={rulesAtPoint} clickLabel={clickLabel} />

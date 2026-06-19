@@ -14,11 +14,22 @@ const LEGEND_ITEMS = [
   },
 ] as const
 
+function formatDataUpdated(iso: string): string | null {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
 interface LegendProps {
   featureCount: number | null
   visibleCount: number | null
   slot: Slot
   endMinuteOfDay: number | null
+  dataGeneratedAt?: string | null
+  pipelineVersion?: string | null
 }
 
 export function Legend({
@@ -26,6 +37,8 @@ export function Legend({
   visibleCount,
   slot,
   endMinuteOfDay,
+  dataGeneratedAt,
+  pipelineVersion,
 }: LegendProps) {
   const periodLabel = formatSlotLabel(slot, endMinuteOfDay)
   const timePhrase = endMinuteOfDay != null ? 'period' : 'time'
@@ -53,6 +66,13 @@ export function Legend({
           </strong>{' '}
           of {featureCount.toLocaleString()} geocoded curb segments in the
           selected {timePhrase}.
+        </p>
+      )}
+
+      {dataGeneratedAt && formatDataUpdated(dataGeneratedAt) && (
+        <p className="legend-meta">
+          Map data generated {formatDataUpdated(dataGeneratedAt)}
+          {pipelineVersion ? ` (pipeline ${pipelineVersion})` : ''}.
         </p>
       )}
     </div>

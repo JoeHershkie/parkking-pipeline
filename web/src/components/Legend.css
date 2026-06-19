@@ -60,3 +60,10 @@
 .legend-coverage strong {
   color: var(--text-h);
 }
+
+.legend-meta {
+  margin: 0.5rem 0 0;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}

@@ -1,10 +1,9 @@
 # Toronto Parking Map
 
-Turn Toronto parking bylaw open data into an interactive map of curb restrictions — no parking, no stopping, no standing, and time-limited zones.
+[![Pipeline CI](https://github.com/JoeHershkie/toronto-parking-map/actions/workflows/pipeline-ci.yml/badge.svg)](https://github.com/JoeHershkie/toronto-parking-map/actions/workflows/pipeline-ci.yml)
+[![Web CI](https://github.com/JoeHershkie/toronto-parking-map/actions/workflows/web-ci.yml/badge.svg)](https://github.com/JoeHershkie/toronto-parking-map/actions/workflows/web-ci.yml)
 
-<!-- Uncomment after adding docs/img/map-screenshot.png from the web app:
-![Map screenshot](docs/img/map-screenshot.png)
--->
+Turn Toronto parking bylaw open data into an interactive map of curb restrictions — no parking, no stopping, no standing, and time-limited zones.
 
 ## Why this is hard
 
@@ -83,7 +82,7 @@ npm test
 npm run build
 ```
 
-CI runs on push to `main` (see badges once published to GitHub).
+CI runs on push to `main` (see badges above).
 
 ## Data acquisition
 
