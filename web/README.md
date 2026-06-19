@@ -1,31 +1,33 @@
-# Toronto Parking Bylaws (parking-web)
+# Toronto Parking Bylaws (web)
 
-Interactive map of geocoded Toronto curb parking bylaws. Data is produced by the separate `parking-pipeline` project and loaded as static GeoJSON in this app.
+Interactive map of geocoded Toronto curb parking bylaws. Data is produced by [`pipeline/`](../pipeline/) and loaded as static GeoJSON in this app.
 
 ## Prerequisites
 
-- Node.js 20+
-- Map data: copy `final_parking_map.geojson` from the pipeline repo into this project:
+- Node.js 22+ (matches CI)
+- Map data: copy pipeline output into this project:
 
 ```bash
-cp ../parking-pipeline/data/final_parking_map.geojson public/data/
+cp ../pipeline/data/final_parking_map.geojson public/data/
 ```
 
-GeoJSON files under `public/data/` are gitignored; refresh the copy whenever you re-run the pipeline fullrun so features include structured `schedule` objects (`v: 1`).
+GeoJSON files under `public/data/` are gitignored; refresh the copy whenever you re-run `parking-run` so features include structured `schedule` objects (`v: 1`).
 
-### Address search (Google Places)
+The basemap uses [OpenFreeMap](https://openfreemap.org/) (no API key). Address search is optional (see below).
+
+### Address search (Google Places, optional)
 
 1. Create a [Google Cloud](https://console.cloud.google.com/) project with billing enabled.
 2. Enable **Places API (New)**.
 3. Create a browser API key restricted to HTTP referrers (e.g. `http://localhost:5173/*`) and Places APIs only.
 4. Copy `.env.example` to `.env` and set `VITE_GOOGLE_MAPS_API_KEY`.
 
-The app uses session tokens and Place Details (Essentials, location fields only) so typical usage stays within the free monthly Essentials caps (10,000 autocomplete + 10,000 details requests). Set a billing budget alert in Cloud Console if desired.
+The app uses session tokens and Place Details (Essentials, location fields only) so typical usage stays within the free monthly Essentials caps. Set a billing budget alert in Cloud Console if desired. Without a key, the map and time filter still work; only address search is disabled.
 
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -49,10 +51,11 @@ npm run preview
 - Search by address (Google Places autocomplete) to fly to a location and highlight nearby curb segments
 - Legend with segment counts for the selected time period
 
-Schedule logic lives under [`src/lib/schedule/`](src/lib/schedule/) and mirrors the parking-pipeline contract. Display text for bylaws still comes from the `Rule` property; filtering never regex-parses `Rule`.
+Schedule logic lives under [`src/lib/schedule/`](src/lib/schedule/) and mirrors the pipeline contract (`overlaps_membership`). Parity is tested against [`pipeline/tests/fixtures/schedule_corpus.json`](../pipeline/tests/fixtures/schedule_corpus.json). Display text for bylaws still comes from the `Rule` property; filtering never regex-parses `Rule`.
 
 ## Tests
 
 ```bash
 npm test
+npm run lint
 ```

@@ -14,7 +14,7 @@ City open data lists *what* is restricted on each curb segment, but the geograph
 
 This project parses that text, resolves street names against the [Toronto Centreline (TCL)](https://open.toronto.ca/dataset/toronto-centreline-tcl/), walks centreline graphs to find block geometry, and exports map-ready GeoJSON for a React + MapLibre frontend.
 
-**Scale (full local runs):** ~80k raw bylaw rows → ~19k map features. Failure-ledger triage drove `INTERSECTION_NOT_FOUND` from 6,601 → ~2,819 over iterative fixes.
+**Scale (full local runs, 2026-06-18):** 76,849 raw bylaw rows → 21,433 map features. Failure-ledger triage drove `INTERSECTION_NOT_FOUND` from ~6,600 (early runs) → 1,174 on the current codebase.
 
 ## Repository layout
 
@@ -38,23 +38,21 @@ flowchart LR
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.12+ (3.14 tested locally; CI runs 3.12–3.14)
 - Node.js 22+ (for the web app)
 - Toronto open-data files (see [Data acquisition](#data-acquisition))
 
 ### Pipeline
 
 ```bash
-cd pipeline
-python -m venv .venv
+./scripts/setup.sh          # once per clone / after pull (creates .venv, pip install -e)
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
 
 # Run stages (or use: parking-run)
 parking-clean
 parking-parse-schedule
 parking-parse-between
-parking-resolve
+parking-resolve             # auto-refreshes tcl_street_names.csv when stale
 parking-geo
 ```
 
@@ -64,7 +62,7 @@ Use `-v` / `--verbose` on any stage for debug logging, or set `PARKING_VERBOSE=1
 
 ```bash
 cd web
-cp .env.example .env    # add your MapTiler or other tile key
+cp .env.example .env    # optional: Google Places API key for address search
 npm ci
 npm run dev
 ```
@@ -97,16 +95,14 @@ Download these datasets manually from Toronto Open Data and place them under `pi
 | `tcl_streets.geojson` | [Toronto Centreline (TCL)](https://open.toronto.ca/dataset/toronto-centreline-tcl/) |
 | `tcl_intersections.geojson` | [Intersection file](https://open.toronto.ca/dataset/intersection-file-city-of-toronto/) |
 
-Then generate the highway index:
+`parking-resolve` regenerates `tcl_street_names.csv` when it is missing or older than `tcl_streets.geojson`. To force a refresh: `python scripts/export_tcl_street_names.py --force` (from `pipeline/` with the venv active).
+
+Committed [`pipeline/data/samples/`](pipeline/data/samples/) fixtures let tests and CI run without the full ~120 MB TCL download.
+
+Regenerate sample fixtures after changing fixture streets:
 
 ```bash
 cd pipeline
-python scripts/export_tcl_street_names.py
-```
-
-Committed [`pipeline/data/samples/`](pipeline/data/samples/) fixtures let tests and CI run without the full ~120MB TCL download. Regenerate samples after changing fixture streets:
-
-```bash
 python scripts/build_sample_fixtures.py
 ```
 
