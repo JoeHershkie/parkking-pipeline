@@ -288,6 +288,27 @@ def assign_fix_tier(row: pd.Series, alias_names: set[str]) -> tuple[str, str, st
             'Review intersection match for this cross/highway pair',
         )
 
+    if reason == 'GEOMETRY_EXCEPTION':
+        return (
+            'D_hard',
+            'geometry_exception',
+            'Unhandled slice exception; inspect detail and stack trace',
+        )
+
+    if reason == 'EMPTY_GEOMETRY':
+        return (
+            'A_skipped',
+            'empty_geometry',
+            'Slice produced empty geometry (non-collapse)',
+        )
+
+    if reason == 'MISSING_RULE_TYPE':
+        return (
+            'A_trivial',
+            'missing_rule_type',
+            'Row reached geo without rule_type; fix parse or filter earlier',
+        )
+
     if reason == 'GEOMETRY_ERROR':
         if geo_attr == 'valid_point_zone':
             return (

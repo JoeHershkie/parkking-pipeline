@@ -486,10 +486,16 @@ def _print_exemplars(df: pd.DataFrame, cause: str, n: int = 5) -> None:
 def main() -> None:
     init_geo()
     fl = pd.read_csv(data_path('failure_ledger.csv'))
-    geo = fl[(fl['stage'] == 'geo') & (fl['reason_code'] == 'GEOMETRY_ERROR')].copy()
-
+    geo_fl = fl[fl['stage'] == 'geo']
     parsed = pd.read_csv(data_path('parsed_successes.csv'))
     n_parsed = len(parsed)
+
+    for code in ('GEOMETRY_EXCEPTION', 'EMPTY_GEOMETRY', 'MISSING_RULE_TYPE'):
+        n = int((geo_fl['reason_code'] == code).sum())
+        if n:
+            print(f'{code}: {n} ({100 * n / n_parsed:.1f}% of parsed)')
+
+    geo = fl[(fl['stage'] == 'geo') & (fl['reason_code'] == 'GEOMETRY_ERROR')].copy()
 
     parse_cols = ['_id', 'Highway', 'Between', 'rule_type', *PARSE_COLUMNS]
     parse_cols = [c for c in parse_cols if c in parsed.columns]

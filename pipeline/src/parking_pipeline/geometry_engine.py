@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 
 import geopandas as gpd
 import pandas as pd
@@ -39,8 +42,11 @@ from .geo_slice import (  # noqa: F401
     AMBIGUOUS_INTERSECTION,
     BLOCK_FAMILY_RULES,
     DISCONNECTED_BLOCK,
+    EMPTY_GEOMETRY,
     GEOMETRY_ERROR,
+    GEOMETRY_EXCEPTION,
     INTERSECTION_NOT_FOUND,
+    MISSING_RULE_TYPE,
     STREET_NOT_FOUND,
     SUPPORTED_RULE_TYPES,
     UNSUPPORTED_RULE_TYPE,
@@ -58,6 +64,7 @@ from .geo_slice import (  # noqa: F401
     slice_block_to_terminus_path,
     slice_street,
 )
+from .parse_between import PARSE_INVALID
 from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
 from .paths import data_path
 from .schedule_format import schedule_from_json
@@ -97,7 +104,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
 
     if 'parse_valid' in row_s.index and not _parse_valid_flag(row_s.get('parse_valid')):
         detail = str(row_s.get('parse_error') or 'parse_valid is false').strip()
-        return failure(GEOMETRY_ERROR, detail or 'parse_valid is false')
+        return failure(PARSE_INVALID, detail or 'parse_valid is false')
 
     if 'resolve_valid' in row_s.index and not _resolve_valid_flag(row_s.get('resolve_valid')):
         detail = str(row_s.get('resolve_error') or 'resolve_valid is false').strip()
@@ -105,7 +112,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
 
     parsed = parsed_for_highway
     if not parsed.get('rule_type'):
-        return failure(GEOMETRY_ERROR, 'missing or empty rule_type')
+        return failure(MISSING_RULE_TYPE, 'missing or empty rule_type')
 
     if not highway:
         return failure(STREET_NOT_FOUND, 'missing highway key')
@@ -113,7 +120,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
     try:
         result = slice_street(highway, parsed, bylaw_highway=display_highway)
     except Exception as e:
-        return failure(GEOMETRY_ERROR, str(e)[:500])
+        return failure(GEOMETRY_EXCEPTION, str(e)[:500])
 
     if result.ok and not result.geometry.is_empty:
         max_period = row_s.get('Maximum Period Permitted')
@@ -140,7 +147,7 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
     if result.reason_code:
         return failure(result.reason_code, result.detail)
 
-    return failure(GEOMETRY_ERROR, 'empty geometry')
+    return failure(EMPTY_GEOMETRY, 'empty geometry')
 
 
 def _geo_batch_limit(df: pd.DataFrame) -> pd.DataFrame:
@@ -155,6 +162,20 @@ def _geo_workers() -> int:
     if not raw:
         return 0
     return max(0, int(raw))
+
+
+def _source_mtime(name: str) -> str | None:
+    path = data_path(name)
+    if not path.exists():
+        return None
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat()
+
+
+def _pipeline_version() -> str:
+    try:
+        return version('parking-pipeline')
+    except PackageNotFoundError:
+        return 'unknown'
 
 
 def _format_duration(seconds: float) -> str:
@@ -296,7 +317,17 @@ def main(argv: list[str] | None = None) -> int:
         gdf = gpd.GeoDataFrame(results, geometry='geometry')
         gdf.set_crs(epsg=4326, inplace=True)
         out_path = data_path('final_parking_map.geojson')
-        gdf.to_file(out_path, driver="GeoJSON")
+        geojson = json.loads(gdf.to_json())
+        geojson['metadata'] = {
+            'generated_at': datetime.now(UTC).isoformat(),
+            'pipeline_version': _pipeline_version(),
+            'feature_count': len(results),
+            'input_row_count': len(batch_df),
+            'tcl_streets_mtime': _source_mtime('tcl_streets.geojson'),
+            'tcl_intersections_mtime': _source_mtime('tcl_intersections.geojson'),
+        }
+        with out_path.open('w', encoding='utf-8') as f:
+            json.dump(geojson, f)
         export_sec = time.perf_counter() - t0
         log.info(f"Done! Open '{out_path}' to see your local work.")
 

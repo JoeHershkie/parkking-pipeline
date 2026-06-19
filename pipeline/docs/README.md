@@ -106,7 +106,9 @@ Full local run against Toronto open-data exports (see [Data sources](#data-sourc
 | `RESOLVE_STREET_NOT_FOUND` | 178 |
 | `PARSE_NO_MATCH` | 188 |
 | `ZERO_SPAN` | 67 |
-| `GEOMETRY_ERROR` | 0 |
+| `GEOMETRY_ERROR` (collapse) | 0 |
+| `GEOMETRY_EXCEPTION` | 0 |
+| `EMPTY_GEOMETRY` | 0 |
 
 **Historical context:** Early pipeline runs reported ~6,600 `INTERSECTION_NOT_FOUND` failures and ~12k map features before intersection normalizer work, new regex rule types, and alias tables. The snapshot above reflects the current codebase on the same city datasets.
 
@@ -181,7 +183,11 @@ Uses local TCL data via [`geo_indices.py`](../src/parking_pipeline/geo_indices.p
 | `DISCONNECTED_BLOCK` | No graph path between intersection IDs |
 | `AMBIGUOUS_INTERSECTION` | Multiple ID pairs tie on shortest path |
 | `ZERO_SPAN` | No mappable curb segment (expected skip) |
-| `GEOMETRY_ERROR` | Projection/slicing exception |
+| `GEOMETRY_ERROR` | Degenerate projection / zero-length segment (collapse) |
+| `GEOMETRY_EXCEPTION` | Unhandled slice exception |
+| `EMPTY_GEOMETRY` | Slice returned empty geometry |
+| `MISSING_RULE_TYPE` | Row reached geo without `rule_type` |
+| `PARSE_INVALID` | Parse validation failed (may surface at geo stage) |
 
 ## Failure triage
 

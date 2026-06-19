@@ -19,6 +19,9 @@ STREET_NOT_FOUND = 'STREET_NOT_FOUND'
 INTERSECTION_NOT_FOUND = 'INTERSECTION_NOT_FOUND'
 UNSUPPORTED_RULE_TYPE = 'UNSUPPORTED_RULE_TYPE'
 GEOMETRY_ERROR = 'GEOMETRY_ERROR'
+GEOMETRY_EXCEPTION = 'GEOMETRY_EXCEPTION'
+EMPTY_GEOMETRY = 'EMPTY_GEOMETRY'
+MISSING_RULE_TYPE = 'MISSING_RULE_TYPE'
 ZERO_SPAN = 'ZERO_SPAN'
 DISCONNECTED_BLOCK = 'DISCONNECTED_BLOCK'
 
@@ -598,7 +601,7 @@ def slice_between_distances(
     lo, hi = (d0, d1) if d0 <= d1 else (d1, d0)
     sliced_m = substring(line_m, lo, hi)
     if sliced_m.is_empty:
-        return SliceResult(None, GEOMETRY_ERROR, 'empty geometry')
+        return SliceResult(None, EMPTY_GEOMETRY, 'empty geometry')
 
     return SliceResult(transform(gi.project_to_gps, sliced_m))
 
@@ -666,7 +669,7 @@ def slice_street(
                     start_qualifier=parsed_data.get('start_intersection_qualifier'),
                 )
         except Exception as e:
-            return SliceResult(None, GEOMETRY_ERROR, str(e)[:500])
+            return SliceResult(None, GEOMETRY_EXCEPTION, str(e)[:500])
 
     street_line_gps = gi.get_local_street_geometry(highway)
     if not street_line_gps:
@@ -861,6 +864,6 @@ def slice_street(
             return slice_between_distances(street_line_gps, street_line_m, d0m, d1m)
 
     except Exception as e:
-        return SliceResult(None, GEOMETRY_ERROR, str(e)[:500])
+        return SliceResult(None, GEOMETRY_EXCEPTION, str(e)[:500])
 
     return SliceResult(None, UNSUPPORTED_RULE_TYPE, f"rule_type={rule_type!r}")
