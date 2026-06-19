@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -208,10 +209,16 @@ def _print_timing_summary(
     log.info(f"     Total (incl. import):   {_format_duration(startup + main_total)}")
 
 
-if __name__ == "__main__":
-    from .log_config import setup_logging
+def main(argv: list[str] | None = None) -> int:
+    import argparse
 
-    setup_logging()
+    from .log_config import add_verbose_arg, setup_logging
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_verbose_arg(parser)
+    args = parser.parse_args(argv)
+    setup_logging(verbose=args.verbose)
+
     main_start = time.perf_counter()
 
     init_geo()
@@ -302,3 +309,8 @@ if __name__ == "__main__":
         export_sec=export_sec,
         main_total=main_total,
     )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

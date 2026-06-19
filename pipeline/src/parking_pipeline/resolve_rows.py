@@ -18,6 +18,7 @@ from .parse_format import (
     row_to_parsed,
 )
 from .paths import data_path
+from .street_names_csv import ensure_street_names_csv
 from .tcl_highway_key import tcl_highway_key
 
 log = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ def main() -> None:
     path = data_path('parsed_successes.csv')
     df = pd.read_csv(path)
 
+    ensure_street_names_csv()
     _init_resolve_index()
     clear_stage('resolve')
     resolved_df, failure_counts = resolve_rows(df)
