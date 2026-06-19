@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from . import geo_indices as gi
 from . import tcl_graph as tg
 from . import tcl_highway_resolve as thr
 from .tcl_graph import PathPick, StreetGraph
+
+log = logging.getLogger(__name__)
 
 STREET_NOT_FOUND = 'STREET_NOT_FOUND'
 INTERSECTION_NOT_FOUND = 'INTERSECTION_NOT_FOUND'
@@ -669,6 +672,13 @@ def slice_street(
                     start_qualifier=parsed_data.get('start_intersection_qualifier'),
                 )
         except Exception as e:
+            log.debug(
+                'block-family geometry exception for %s (%s): %s',
+                highway,
+                rule_type,
+                e,
+                exc_info=True,
+            )
             return SliceResult(None, GEOMETRY_EXCEPTION, str(e)[:500])
 
     street_line_gps = gi.get_local_street_geometry(highway)
@@ -864,6 +874,13 @@ def slice_street(
             return slice_between_distances(street_line_gps, street_line_m, d0m, d1m)
 
     except Exception as e:
+        log.debug(
+            'offset geometry exception for %s (%s): %s',
+            highway,
+            rule_type,
+            e,
+            exc_info=True,
+        )
         return SliceResult(None, GEOMETRY_EXCEPTION, str(e)[:500])
 
     return SliceResult(None, UNSUPPORTED_RULE_TYPE, f"rule_type={rule_type!r}")

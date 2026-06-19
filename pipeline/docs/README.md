@@ -112,6 +112,8 @@ Full local run against Toronto open-data exports (see [Data sources](#data-sourc
 
 **Historical context:** Early pipeline runs reported ~6,600 `INTERSECTION_NOT_FOUND` failures and ~12k map features before intersection normalizer work, new regex rule types, and alias tables. The snapshot above reflects the current codebase on the same city datasets.
 
+> **Throughput vs accuracy:** These metrics count parsed, resolved, and mapped rows — not whether each emitted segment is on the correct curb. Full-run totals also depend on gitignored alias tables (`highway_aliases.csv`, `street_aliases.csv`) and your open-data download vintage; they are not third-party reproducible without those inputs. Sample-cohort geometry regression lives in [`tests/test_geometry_golden.py`](../tests/test_geometry_golden.py).
+
 ## Data files
 
 | File | Source / generated | Role |

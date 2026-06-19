@@ -120,6 +120,13 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
     try:
         result = slice_street(highway, parsed, bylaw_highway=display_highway)
     except Exception as e:
+        log.debug(
+            'geometry exception for row %s (%s): %s',
+            row_id,
+            display_highway,
+            e,
+            exc_info=True,
+        )
         return failure(GEOMETRY_EXCEPTION, str(e)[:500])
 
     if result.ok and not result.geometry.is_empty:

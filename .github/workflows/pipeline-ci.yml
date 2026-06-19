@@ -40,6 +40,9 @@ jobs:
       - name: Pytest
         run: pytest
 
+      - name: Module coverage floors
+        run: python scripts/check_module_coverage.py
+
       - name: Parse cohort regression (sample)
         run: |
           python scripts/regression_parse_cohort.py \

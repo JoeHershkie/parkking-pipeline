@@ -1,0 +1,2120 @@
+{
+  "records": [
+    {
+      "_id": "210",
+      "between": "Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.400013,
+          43.714573
+        ],
+        [
+          -79.401982,
+          43.714154
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Albertus Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "241",
+      "between": "Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.400603,
+          43.717305
+        ],
+        [
+          -79.403101,
+          43.716789
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Alexandra Boulevard",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "244",
+      "between": "A point 30.5 metres north of Heath Street East and Glen Elm Avenue",
+      "coords": [
+        [
+          -79.39329,
+          43.690037
+        ],
+        [
+          -79.393394,
+          43.690301
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Alvin Avenue",
+      "reason_code": null,
+      "rule_type": "offset_to_intersect",
+      "stage": "geo"
+    },
+    {
+      "_id": "246",
+      "between": "Heath Street East and Glen Elm Avenue",
+      "coords": [
+        [
+          -79.393261,
+          43.690333
+        ],
+        [
+          -79.393417,
+          43.690729
+        ],
+        [
+          -79.393411,
+          43.690775
+        ],
+        [
+          -79.393339,
+          43.690861
+        ],
+        [
+          -79.393258,
+          43.690953
+        ],
+        [
+          -79.393244,
+          43.691005
+        ],
+        [
+          -79.393241,
+          43.691057
+        ],
+        [
+          -79.393247,
+          43.691112
+        ],
+        [
+          -79.393252,
+          43.691156
+        ],
+        [
+          -79.393272,
+          43.691219
+        ],
+        [
+          -79.393447,
+          43.691612
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Alvin Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "258",
+      "between": "Spadina Road and Bathurst Street",
+      "coords": [
+        [
+          -79.415414,
+          43.695204
+        ],
+        [
+          -79.416559,
+          43.694948
+        ],
+        [
+          -79.417745,
+          43.694712
+        ],
+        [
+          -79.418934,
+          43.694471
+        ],
+        [
+          -79.420126,
+          43.694215
+        ],
+        [
+          -79.421414,
+          43.693956
+        ],
+        [
+          -79.422583,
+          43.693712
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Ardmore Road",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "259",
+      "between": "Spadina Road and the south end of Ardwold Gate",
+      "coords": [
+        [
+          -79.409425,
+          43.680569
+        ],
+        [
+          -79.409248,
+          43.680607
+        ],
+        [
+          -79.409145,
+          43.680621
+        ],
+        [
+          -79.40901,
+          43.680622
+        ],
+        [
+          -79.408885,
+          43.68061
+        ],
+        [
+          -79.408757,
+          43.680569
+        ],
+        [
+          -79.408627,
+          43.680506
+        ],
+        [
+          -79.408463,
+          43.680417
+        ],
+        [
+          -79.408229,
+          43.680358
+        ],
+        [
+          -79.408023,
+          43.680329
+        ],
+        [
+          -79.407841,
+          43.680312
+        ],
+        [
+          -79.407668,
+          43.680286
+        ],
+        [
+          -79.4075,
+          43.68025
+        ],
+        [
+          -79.407388,
+          43.680191
+        ],
+        [
+          -79.407318,
+          43.680134
+        ],
+        [
+          -79.407261,
+          43.680046
+        ],
+        [
+          -79.406994,
+          43.679473
+        ],
+        [
+          -79.406933,
+          43.679346
+        ],
+        [
+          -79.406914,
+          43.679292
+        ],
+        [
+          -79.406916,
+          43.679252
+        ],
+        [
+          -79.406936,
+          43.679201
+        ],
+        [
+          -79.406962,
+          43.679162
+        ],
+        [
+          -79.406985,
+          43.679136
+        ],
+        [
+          -79.407016,
+          43.679111
+        ],
+        [
+          -79.407044,
+          43.679095
+        ],
+        [
+          -79.407088,
+          43.679084
+        ],
+        [
+          -79.407185,
+          43.679057
+        ],
+        [
+          -79.407365,
+          43.679015
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Ardwold Gate",
+      "reason_code": null,
+      "rule_type": "block_to_terminus",
+      "stage": "geo"
+    },
+    {
+      "_id": "273",
+      "between": "Spadina Road and Dunloe Road",
+      "coords": [
+        [
+          -79.415792,
+          43.696087
+        ],
+        [
+          -79.415022,
+          43.696283
+        ],
+        [
+          -79.413954,
+          43.696506
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Archer Road",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "282",
+      "between": "Colbeck Street and Annette Street",
+      "coords": [
+        [
+          -79.484909,
+          43.653201
+        ],
+        [
+          -79.48556,
+          43.654749
+        ],
+        [
+          -79.486063,
+          43.65599
+        ],
+        [
+          -79.486898,
+          43.658092
+        ],
+        [
+          -79.487063,
+          43.6585
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Armadale Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "283",
+      "between": "A point 131.1 metres east of Spadina Road and the south end of Ardwold Gate",
+      "coords": [
+        [
+          -79.409425,
+          43.680569
+        ],
+        [
+          -79.409248,
+          43.680607
+        ],
+        [
+          -79.409145,
+          43.680621
+        ],
+        [
+          -79.40901,
+          43.680622
+        ],
+        [
+          -79.408885,
+          43.68061
+        ],
+        [
+          -79.408757,
+          43.680569
+        ],
+        [
+          -79.408627,
+          43.680506
+        ],
+        [
+          -79.408463,
+          43.680417
+        ],
+        [
+          -79.408229,
+          43.680358
+        ],
+        [
+          -79.408023,
+          43.680329
+        ],
+        [
+          -79.407841,
+          43.680312
+        ],
+        [
+          -79.407668,
+          43.680286
+        ],
+        [
+          -79.4075,
+          43.68025
+        ],
+        [
+          -79.407388,
+          43.680191
+        ],
+        [
+          -79.407318,
+          43.680134
+        ],
+        [
+          -79.407261,
+          43.680046
+        ],
+        [
+          -79.406994,
+          43.679473
+        ],
+        [
+          -79.406933,
+          43.679346
+        ],
+        [
+          -79.406914,
+          43.679292
+        ],
+        [
+          -79.406916,
+          43.679252
+        ],
+        [
+          -79.406936,
+          43.679201
+        ],
+        [
+          -79.406962,
+          43.679162
+        ],
+        [
+          -79.406985,
+          43.679136
+        ],
+        [
+          -79.407016,
+          43.679111
+        ],
+        [
+          -79.407044,
+          43.679095
+        ],
+        [
+          -79.407088,
+          43.679084
+        ],
+        [
+          -79.407185,
+          43.679057
+        ],
+        [
+          -79.407365,
+          43.679015
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Ardwold Gate",
+      "reason_code": null,
+      "rule_type": "block_to_terminus",
+      "stage": "geo"
+    },
+    {
+      "_id": "284",
+      "between": "Spadina Road and a point 131.1 metres east",
+      "coords": [
+        [
+          -79.407907,
+          43.680318
+        ],
+        [
+          -79.408023,
+          43.680329
+        ],
+        [
+          -79.408229,
+          43.680358
+        ],
+        [
+          -79.408463,
+          43.680417
+        ],
+        [
+          -79.408627,
+          43.680506
+        ],
+        [
+          -79.408757,
+          43.680569
+        ],
+        [
+          -79.408885,
+          43.68061
+        ],
+        [
+          -79.40901,
+          43.680622
+        ],
+        [
+          -79.409145,
+          43.680621
+        ],
+        [
+          -79.409248,
+          43.680607
+        ],
+        [
+          -79.409425,
+          43.680569
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Ardwold Gate",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "322",
+      "between": "A point 48.8 metres east of Yonge Street and a point 187.4 metres further east",
+      "coords": [
+        [
+          -79.396424,
+          43.700406
+        ],
+        [
+          -79.394186,
+          43.700864
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Belsize Drive",
+      "reason_code": null,
+      "rule_type": "relative_extension",
+      "stage": "geo"
+    },
+    {
+      "_id": "336",
+      "between": "A point 120.4 metres west of Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.399252,
+          43.703861
+        ],
+        [
+          -79.400268,
+          43.703657
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Berwick Avenue",
+      "reason_code": null,
+      "rule_type": "offset_to_intersect",
+      "stage": "geo"
+    },
+    {
+      "_id": "345",
+      "between": "Yonge Street and a point 120.4 metres west",
+      "coords": [
+        [
+          -79.397813,
+          43.704151
+        ],
+        [
+          -79.398303,
+          43.704052
+        ],
+        [
+          -79.399252,
+          43.703861
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Berwick Avenue",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "346",
+      "between": "Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.397813,
+          43.704151
+        ],
+        [
+          -79.398303,
+          43.704052
+        ],
+        [
+          -79.400268,
+          43.703657
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Berwick Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "352",
+      "between": "Annette Street and a point 37.8 metres north of Annette Street",
+      "coords": [
+        [
+          -79.481501,
+          43.660178
+        ],
+        [
+          -79.481602,
+          43.66051
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Beresford Avenue",
+      "reason_code": null,
+      "rule_type": "intersect_to_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "400",
+      "between": "Yonge Street and a point 161.8 metres west",
+      "coords": [
+        [
+          -79.39134,
+          43.681432
+        ],
+        [
+          -79.393272,
+          43.681037
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Birch Avenue",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "429",
+      "between": "Spadina Road and Madison Avenue",
+      "coords": [
+        [
+          -79.406042,
+          43.672188
+        ],
+        [
+          -79.404853,
+          43.672421
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Bernard Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "445",
+      "between": "A point 36.7 metres east of Yonge Street and a point 91.4 metres east of Yonge Street",
+      "coords": [
+        [
+          -79.40268,
+          43.72867
+        ],
+        [
+          -79.402453,
+          43.728717
+        ],
+        [
+          -79.402026,
+          43.728803
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Bowood Avenue",
+      "reason_code": null,
+      "rule_type": "dual_anchor",
+      "stage": "geo"
+    },
+    {
+      "_id": "464",
+      "between": "A point 41.1 metres north of Edward Street and Elm Street",
+      "coords": [
+        [
+          -79.384893,
+          43.656624
+        ],
+        [
+          -79.385106,
+          43.65714
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Barnaby Place",
+      "reason_code": null,
+      "rule_type": "offset_to_intersect",
+      "stage": "geo"
+    },
+    {
+      "_id": "493",
+      "between": "Yonge Street and a point 5.4 metres east of a point opposite the east limit of Baxter Street",
+      "coords": [
+        [
+          -79.388381,
+          43.675746
+        ],
+        [
+          -79.388265,
+          43.675759
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Aylmer Avenue",
+      "reason_code": null,
+      "rule_type": "intersect_to_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "501",
+      "between": "Annette Street and Humberside Avenue",
+      "coords": [
+        [
+          -79.46698,
+          43.663398
+        ],
+        [
+          -79.465923,
+          43.660978
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Aziel Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "514",
+      "between": "Yonge Street and Jedburgh Road",
+      "coords": [
+        [
+          -79.402819,
+          43.727446
+        ],
+        [
+          -79.403483,
+          43.7273
+        ],
+        [
+          -79.403483,
+          43.7273
+        ],
+        [
+          -79.404766,
+          43.727036
+        ],
+        [
+          -79.405316,
+          43.72692
+        ],
+        [
+          -79.406446,
+          43.726682
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Bedford Park Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "536",
+      "between": "Yonge Street and the east end of Baxter Street",
+      "coords": [
+        [
+          -79.388849,
+          43.675305
+        ],
+        [
+          -79.388264,
+          43.67544
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Baxter Street",
+      "reason_code": null,
+      "rule_type": "block_to_terminus",
+      "stage": "geo"
+    },
+    {
+      "_id": "553",
+      "between": "Spadina Avenue and a point 53.3 metres east",
+      "coords": [
+        [
+          -79.398926,
+          43.655138
+        ],
+        [
+          -79.399562,
+          43.655007
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Baldwin Street",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "562",
+      "between": "Spadina Avenue and McCaul Street",
+      "coords": [
+        [
+          -79.398831,
+          43.654914
+        ],
+        [
+          -79.398049,
+          43.65507
+        ],
+        [
+          -79.398049,
+          43.65507
+        ],
+        [
+          -79.396946,
+          43.655285
+        ],
+        [
+          -79.394626,
+          43.655768
+        ],
+        [
+          -79.394044,
+          43.655891
+        ],
+        [
+          -79.393464,
+          43.656012
+        ],
+        [
+          -79.392253,
+          43.656269
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Baldwin Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "596",
+      "between": "Yonge Street and a point 92 metres west",
+      "coords": [
+        [
+          -79.393797,
+          43.685754
+        ],
+        [
+          -79.393802,
+          43.685753
+        ],
+        [
+          -79.394894,
+          43.685525
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Balmoral Avenue",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "598",
+      "between": "Yonge Street and Avenue Road",
+      "coords": [
+        [
+          -79.393186,
+          43.685881
+        ],
+        [
+          -79.393797,
+          43.685754
+        ],
+        [
+          -79.393797,
+          43.685754
+        ],
+        [
+          -79.393802,
+          43.685753
+        ],
+        [
+          -79.396831,
+          43.685121
+        ],
+        [
+          -79.400314,
+          43.684397
+        ],
+        [
+          -79.400533,
+          43.684285
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Balmoral Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "600",
+      "between": "Yonge Street and Davenport Road",
+      "coords": [
+        [
+          -79.388987,
+          43.675589
+        ],
+        [
+          -79.38939,
+          43.675499
+        ],
+        [
+          -79.389536,
+          43.675468
+        ],
+        [
+          -79.390503,
+          43.675254
+        ],
+        [
+          -79.391454,
+          43.675058
+        ],
+        [
+          -79.392412,
+          43.674856
+        ],
+        [
+          -79.392753,
+          43.674784
+        ],
+        [
+          -79.392923,
+          43.67471
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Belmont Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "601",
+      "between": "Yonge Street and Davenport Road",
+      "coords": [
+        [
+          -79.388987,
+          43.675589
+        ],
+        [
+          -79.38939,
+          43.675499
+        ],
+        [
+          -79.389536,
+          43.675468
+        ],
+        [
+          -79.390503,
+          43.675254
+        ],
+        [
+          -79.391454,
+          43.675058
+        ],
+        [
+          -79.392412,
+          43.674856
+        ],
+        [
+          -79.392753,
+          43.674784
+        ],
+        [
+          -79.392923,
+          43.67471
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Belmont Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "614",
+      "between": "Walmer Road (west intersection) and Spadina Road",
+      "coords": [
+        [
+          -79.410247,
+          43.678462
+        ],
+        [
+          -79.409052,
+          43.678752
+        ],
+        [
+          -79.408851,
+          43.678802
+        ],
+        [
+          -79.408807,
+          43.678817
+        ],
+        [
+          -79.408758,
+          43.678845
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Austin Terrace",
+      "reason_code": null,
+      "rule_type": "parenthetical_block",
+      "stage": "geo"
+    },
+    {
+      "_id": "619",
+      "between": "Edward Street and Elm Street",
+      "coords": [
+        [
+          -79.384746,
+          43.65627
+        ],
+        [
+          -79.385106,
+          43.65714
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Barnaby Place",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "620",
+      "between": "Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.401595,
+          43.72197
+        ],
+        [
+          -79.401741,
+          43.721959
+        ],
+        [
+          -79.402074,
+          43.721937
+        ],
+        [
+          -79.402201,
+          43.721932
+        ],
+        [
+          -79.402374,
+          43.721924
+        ],
+        [
+          -79.402459,
+          43.721926
+        ],
+        [
+          -79.402522,
+          43.721934
+        ],
+        [
+          -79.4027,
+          43.721965
+        ],
+        [
+          -79.402892,
+          43.721997
+        ],
+        [
+          -79.403044,
+          43.72202
+        ],
+        [
+          -79.403169,
+          43.722035
+        ],
+        [
+          -79.403316,
+          43.722049
+        ],
+        [
+          -79.403443,
+          43.722059
+        ],
+        [
+          -79.403584,
+          43.722064
+        ],
+        [
+          -79.403743,
+          43.722061
+        ],
+        [
+          -79.403912,
+          43.722054
+        ],
+        [
+          -79.404038,
+          43.722046
+        ],
+        [
+          -79.404235,
+          43.722022
+        ],
+        [
+          -79.404488,
+          43.721983
+        ],
+        [
+          -79.404628,
+          43.721959
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Chatsworth Drive",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "633",
+      "between": "Dupont Street and a point 68 metres south",
+      "coords": [
+        [
+          -79.419515,
+          43.666345
+        ],
+        [
+          -79.41958,
+          43.666498
+        ],
+        [
+          -79.419606,
+          43.666569
+        ],
+        [
+          -79.41975,
+          43.666906
+        ],
+        [
+          -79.41976,
+          43.666931
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Christie Street",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "643",
+      "between": "Dupont Street and Garnet Avenue",
+      "coords": [
+        [
+          -79.421542,
+          43.671613
+        ],
+        [
+          -79.421227,
+          43.670775
+        ],
+        [
+          -79.421227,
+          43.670775
+        ],
+        [
+          -79.421091,
+          43.670422
+        ],
+        [
+          -79.420933,
+          43.670012
+        ],
+        [
+          -79.420933,
+          43.670012
+        ],
+        [
+          -79.420621,
+          43.669266
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Christie Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "646",
+      "between": "Spadina Road and Vesta Drive",
+      "coords": [
+        [
+          -79.41792,
+          43.701137
+        ],
+        [
+          -79.419121,
+          43.700876
+        ],
+        [
+          -79.420328,
+          43.700631
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Chadwick Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "662",
+      "between": "Bloor Street East and Elm Avenue/Nanton Avenue",
+      "coords": [
+        [
+          -79.368101,
+          43.673819
+        ],
+        [
+          -79.368282,
+          43.673943
+        ],
+        [
+          -79.368478,
+          43.674231
+        ],
+        [
+          -79.368552,
+          43.674336
+        ],
+        [
+          -79.368593,
+          43.674447
+        ],
+        [
+          -79.368593,
+          43.674447
+        ],
+        [
+          -79.368606,
+          43.674589
+        ],
+        [
+          -79.368633,
+          43.674639
+        ],
+        [
+          -79.36866,
+          43.674721
+        ],
+        [
+          -79.368749,
+          43.675077
+        ],
+        [
+          -79.368752,
+          43.67514
+        ],
+        [
+          -79.368817,
+          43.675351
+        ],
+        [
+          -79.369007,
+          43.675905
+        ],
+        [
+          -79.369035,
+          43.676013
+        ],
+        [
+          -79.369066,
+          43.676081
+        ],
+        [
+          -79.369129,
+          43.676157
+        ],
+        [
+          -79.369196,
+          43.676225
+        ],
+        [
+          -79.36929,
+          43.676243
+        ],
+        [
+          -79.369398,
+          43.676257
+        ],
+        [
+          -79.369717,
+          43.676266
+        ],
+        [
+          -79.369835,
+          43.676289
+        ],
+        [
+          -79.369907,
+          43.676338
+        ],
+        [
+          -79.36998,
+          43.676415
+        ],
+        [
+          -79.370069,
+          43.676501
+        ],
+        [
+          -79.370178,
+          43.676582
+        ],
+        [
+          -79.370283,
+          43.676631
+        ],
+        [
+          -79.370424,
+          43.676663
+        ],
+        [
+          -79.370579,
+          43.676699
+        ],
+        [
+          -79.370731,
+          43.676726
+        ],
+        [
+          -79.370843,
+          43.676753
+        ],
+        [
+          -79.370843,
+          43.676753
+        ],
+        [
+          -79.370966,
+          43.677042
+        ],
+        [
+          -79.370987,
+          43.677052
+        ],
+        [
+          -79.371012,
+          43.677061
+        ],
+        [
+          -79.371051,
+          43.677073
+        ],
+        [
+          -79.371082,
+          43.67708
+        ],
+        [
+          -79.371082,
+          43.67708
+        ],
+        [
+          -79.372168,
+          43.676846
+        ],
+        [
+          -79.372244,
+          43.676772
+        ],
+        [
+          -79.372231,
+          43.676694
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Castle Frank Road",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "687",
+      "between": "Yonge Street and Bloor Street West",
+      "coords": [
+        [
+          -79.387866,
+          43.672874
+        ],
+        [
+          -79.387696,
+          43.672865
+        ],
+        [
+          -79.387488,
+          43.672855
+        ],
+        [
+          -79.387415,
+          43.672846
+        ],
+        [
+          -79.387301,
+          43.672824
+        ],
+        [
+          -79.387143,
+          43.67277
+        ],
+        [
+          -79.386161,
+          43.67244
+        ],
+        [
+          -79.386161,
+          43.67244
+        ],
+        [
+          -79.385465,
+          43.67218
+        ],
+        [
+          -79.385378,
+          43.672156
+        ],
+        [
+          -79.385285,
+          43.67214
+        ],
+        [
+          -79.385212,
+          43.672132
+        ],
+        [
+          -79.385164,
+          43.672126
+        ],
+        [
+          -79.385128,
+          43.672125
+        ],
+        [
+          -79.385052,
+          43.672127
+        ],
+        [
+          -79.384891,
+          43.672148
+        ],
+        [
+          -79.384759,
+          43.672176
+        ],
+        [
+          -79.384294,
+          43.672259
+        ],
+        [
+          -79.384294,
+          43.672259
+        ],
+        [
+          -79.384213,
+          43.672262
+        ],
+        [
+          -79.384156,
+          43.672263
+        ],
+        [
+          -79.384103,
+          43.672259
+        ],
+        [
+          -79.384047,
+          43.672251
+        ],
+        [
+          -79.383997,
+          43.672241
+        ],
+        [
+          -79.383954,
+          43.672228
+        ],
+        [
+          -79.383914,
+          43.672217
+        ],
+        [
+          -79.383871,
+          43.672201
+        ],
+        [
+          -79.383828,
+          43.672184
+        ],
+        [
+          -79.383791,
+          43.672168
+        ],
+        [
+          -79.383751,
+          43.672146
+        ],
+        [
+          -79.383711,
+          43.672126
+        ],
+        [
+          -79.383688,
+          43.672112
+        ],
+        [
+          -79.383635,
+          43.67207
+        ],
+        [
+          -79.383579,
+          43.672037
+        ],
+        [
+          -79.38316,
+          43.671046
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Church Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "707",
+      "between": "Yonge Street and a point 75.6 metres further east",
+      "coords": [
+        [
+          -79.383245,
+          43.669251
+        ],
+        [
+          -79.38247,
+          43.669405
+        ],
+        [
+          -79.382341,
+          43.669432
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Charles Street East",
+      "reason_code": null,
+      "rule_type": "intersect_extension",
+      "stage": "geo"
+    },
+    {
+      "_id": "711",
+      "between": "Yonge Street and Bloor Street East",
+      "coords": [
+        [
+          -79.387866,
+          43.672874
+        ],
+        [
+          -79.387696,
+          43.672865
+        ],
+        [
+          -79.387488,
+          43.672855
+        ],
+        [
+          -79.387415,
+          43.672846
+        ],
+        [
+          -79.387301,
+          43.672824
+        ],
+        [
+          -79.387143,
+          43.67277
+        ],
+        [
+          -79.386161,
+          43.67244
+        ],
+        [
+          -79.386161,
+          43.67244
+        ],
+        [
+          -79.385465,
+          43.67218
+        ],
+        [
+          -79.385378,
+          43.672156
+        ],
+        [
+          -79.385285,
+          43.67214
+        ],
+        [
+          -79.385212,
+          43.672132
+        ],
+        [
+          -79.385164,
+          43.672126
+        ],
+        [
+          -79.385128,
+          43.672125
+        ],
+        [
+          -79.385052,
+          43.672127
+        ],
+        [
+          -79.384891,
+          43.672148
+        ],
+        [
+          -79.384759,
+          43.672176
+        ],
+        [
+          -79.384294,
+          43.672259
+        ],
+        [
+          -79.384294,
+          43.672259
+        ],
+        [
+          -79.384213,
+          43.672262
+        ],
+        [
+          -79.384156,
+          43.672263
+        ],
+        [
+          -79.384103,
+          43.672259
+        ],
+        [
+          -79.384047,
+          43.672251
+        ],
+        [
+          -79.383997,
+          43.672241
+        ],
+        [
+          -79.383954,
+          43.672228
+        ],
+        [
+          -79.383914,
+          43.672217
+        ],
+        [
+          -79.383871,
+          43.672201
+        ],
+        [
+          -79.383828,
+          43.672184
+        ],
+        [
+          -79.383791,
+          43.672168
+        ],
+        [
+          -79.383751,
+          43.672146
+        ],
+        [
+          -79.383711,
+          43.672126
+        ],
+        [
+          -79.383688,
+          43.672112
+        ],
+        [
+          -79.383635,
+          43.67207
+        ],
+        [
+          -79.383579,
+          43.672037
+        ],
+        [
+          -79.38316,
+          43.671046
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Church Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "725",
+      "between": "Yonge Street and Balmuto Street",
+      "coords": [
+        [
+          -79.386138,
+          43.668722
+        ],
+        [
+          -79.387059,
+          43.668547
+        ],
+        [
+          -79.387393,
+          43.668484
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Charles Street West",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "740",
+      "between": "Spadina Avenue and Henry Street",
+      "coords": [
+        [
+          -79.399302,
+          43.656102
+        ],
+        [
+          -79.398715,
+          43.656221
+        ],
+        [
+          -79.398512,
+          43.656262
+        ],
+        [
+          -79.398339,
+          43.656299
+        ],
+        [
+          -79.39744,
+          43.656484
+        ],
+        [
+          -79.396288,
+          43.656724
+        ],
+        [
+          -79.395825,
+          43.656822
+        ],
+        [
+          -79.395121,
+          43.656964
+        ],
+        [
+          -79.394559,
+          43.657086
+        ],
+        [
+          -79.393964,
+          43.657206
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Cecil Street",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "741",
+      "between": "A point 48.8 metres east of Spadina Avenue and a point 24.4 metres further east",
+      "coords": [
+        [
+          -79.398428,
+          43.65628
+        ],
+        [
+          -79.398512,
+          43.656262
+        ],
+        [
+          -79.398715,
+          43.656221
+        ],
+        [
+          -79.398719,
+          43.65622
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Cecil Street",
+      "reason_code": null,
+      "rule_type": "relative_extension",
+      "stage": "geo"
+    },
+    {
+      "_id": "749",
+      "between": "Spadina Avenue and a point 45.7 metres east",
+      "coords": [
+        [
+          -79.398756,
+          43.656213
+        ],
+        [
+          -79.399302,
+          43.656102
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Cecil Street",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "751",
+      "between": "A point 121.9 metres west of Yonge Street and Duplex Avenue",
+      "coords": [
+        [
+          -79.403091,
+          43.722025
+        ],
+        [
+          -79.403169,
+          43.722035
+        ],
+        [
+          -79.403316,
+          43.722049
+        ],
+        [
+          -79.403443,
+          43.722059
+        ],
+        [
+          -79.403584,
+          43.722064
+        ],
+        [
+          -79.403743,
+          43.722061
+        ],
+        [
+          -79.403912,
+          43.722054
+        ],
+        [
+          -79.404038,
+          43.722046
+        ],
+        [
+          -79.404235,
+          43.722022
+        ],
+        [
+          -79.404488,
+          43.721983
+        ],
+        [
+          -79.404628,
+          43.721959
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Chatsworth Drive",
+      "reason_code": null,
+      "rule_type": "offset_to_intersect",
+      "stage": "geo"
+    },
+    {
+      "_id": "752",
+      "between": "Yonge Street and a point 121.9 metres west",
+      "coords": [
+        [
+          -79.401595,
+          43.72197
+        ],
+        [
+          -79.401741,
+          43.721959
+        ],
+        [
+          -79.402074,
+          43.721937
+        ],
+        [
+          -79.402201,
+          43.721932
+        ],
+        [
+          -79.402374,
+          43.721924
+        ],
+        [
+          -79.402459,
+          43.721926
+        ],
+        [
+          -79.402522,
+          43.721934
+        ],
+        [
+          -79.4027,
+          43.721965
+        ],
+        [
+          -79.402892,
+          43.721997
+        ],
+        [
+          -79.403044,
+          43.72202
+        ],
+        [
+          -79.403091,
+          43.722025
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Chatsworth Drive",
+      "reason_code": null,
+      "rule_type": "perfect_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "794",
+      "between": "Elm Road and a point 141.4 metres west of Elm Road",
+      "coords": [
+        [
+          -79.412303,
+          43.728095
+        ],
+        [
+          -79.413989,
+          43.727741
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Brookdale Avenue",
+      "reason_code": null,
+      "rule_type": "intersect_to_offset",
+      "stage": "geo"
+    },
+    {
+      "_id": "800",
+      "between": "Spadina Road and Vesta Drive",
+      "coords": [
+        [
+          -79.414418,
+          43.69283
+        ],
+        [
+          -79.414571,
+          43.692897
+        ],
+        [
+          -79.414806,
+          43.692832
+        ],
+        [
+          -79.415053,
+          43.692799
+        ],
+        [
+          -79.415255,
+          43.692794
+        ],
+        [
+          -79.415515,
+          43.692813
+        ],
+        [
+          -79.415749,
+          43.692846
+        ],
+        [
+          -79.415944,
+          43.692902
+        ],
+        [
+          -79.416125,
+          43.692955
+        ],
+        [
+          -79.416352,
+          43.69302
+        ],
+        [
+          -79.41649,
+          43.69304
+        ],
+        [
+          -79.416581,
+          43.693046
+        ],
+        [
+          -79.416737,
+          43.693036
+        ],
+        [
+          -79.416895,
+          43.693015
+        ],
+        [
+          -79.417021,
+          43.69299
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Burton Road",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "804",
+      "between": "Yonge Street and Jedburgh Road",
+      "coords": [
+        [
+          -79.403467,
+          43.729931
+        ],
+        [
+          -79.404109,
+          43.729802
+        ],
+        [
+          -79.405246,
+          43.729575
+        ],
+        [
+          -79.406793,
+          43.729243
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Brookdale Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "812",
+      "between": "Yonge Street and Rosewell Avenue",
+      "coords": [
+        [
+          -79.399822,
+          43.713664
+        ],
+        [
+          -79.401606,
+          43.713286
+        ],
+        [
+          -79.403751,
+          43.71284
+        ],
+        [
+          -79.405722,
+          43.712418
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Briar Hill Avenue",
+      "reason_code": null,
+      "rule_type": "block",
+      "stage": "geo"
+    },
+    {
+      "_id": "877",
+      "between": "A point 91.4 metres east of Yonge Street and a point 64 metres further east",
+      "coords": [
+        [
+          -79.38755,
+          43.71187
+        ],
+        [
+          -79.386785,
+          43.712025
+        ]
+      ],
+      "geom_type": "LineString",
+      "highway": "Broadway Avenue",
+      "reason_code": null,
+      "rule_type": "relative_extension",
+      "stage": "geo"
+    }
+  ],
+  "row_count": 50,
+  "sample_csv": "clean_parking_targets.csv"
+}

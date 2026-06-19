@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Legend } from './components/Legend'
-import {
-  ParkingMap,
-  type ParkingMapHandle,
-} from './components/ParkingMap'
+import type { ParkingMapHandle } from './components/ParkingMap'
 import { RulePanel } from './components/RulePanel'
 import { SearchBar, type SelectedPlace } from './components/SearchBar'
 import { TimeFilterBar, type TimeFilterState } from './components/TimeFilterBar'
 import { slotFromDate } from './lib/schedule'
 import type { ParkingFeature, ParkingFeatureCollection, ParkingMapMetadata } from './types/parking'
 import './App.css'
+
+const ParkingMap = lazy(() =>
+  import('./components/ParkingMap').then((module) => ({
+    default: module.ParkingMap,
+  })),
+)
 
 function formatClickLabel(lngLat: [number, number]): string {
   return `${lngLat[1].toFixed(5)}°N, ${Math.abs(lngLat[0]).toFixed(5)}°W`
@@ -126,11 +129,19 @@ function App() {
 
       <div className="app-main">
         <div className="map-column">
-          <ParkingMap
-            onMapReady={handleMapReady}
-            onDataLoaded={handleDataLoaded}
-            onRulesAtPoint={handleRulesAtPoint}
-          />
+          <Suspense
+            fallback={
+              <div className="parking-map-wrap">
+                <div className="map-overlay map-overlay-loading">Loading map…</div>
+              </div>
+            }
+          >
+            <ParkingMap
+              onMapReady={handleMapReady}
+              onDataLoaded={handleDataLoaded}
+              onRulesAtPoint={handleRulesAtPoint}
+            />
+          </Suspense>
           <Legend
             featureCount={featureCount}
             visibleCount={visibleCount}

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 
 from . import tcl_highway_resolve as thr
+
+log = logging.getLogger(__name__)
 
 _GENERIC_LANE_RE = re.compile(r'^lane$', re.I)
 _LANE_POSITION_RE = re.compile(
@@ -247,7 +250,8 @@ def _lazy_street_graphs() -> dict:
             st_gdf = gpd.read_file(streets_path)
             _STREET_GRAPHS_CACHE = tg.build_street_graphs(st_gdf)
             gc.save_street_graphs(streets_path, _STREET_GRAPHS_CACHE)
-    except Exception:
+    except Exception as exc:
+        log.debug('failed to load street graphs for lane resolve: %s', exc, exc_info=True)
         _STREET_GRAPHS_CACHE = {}
     return _STREET_GRAPHS_CACHE
 

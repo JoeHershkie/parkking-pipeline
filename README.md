@@ -15,6 +15,10 @@ This project parses that text, resolves street names against the [Toronto Centre
 
 **Scale (full local runs, 2026-06-18):** 76,849 raw bylaw rows → 21,433 map features. Failure-ledger triage drove `INTERSECTION_NOT_FOUND` from ~6,600 (early runs) → 1,174 on the current codebase.
 
+> **Throughput vs accuracy:** These figures count how many rows were parsed, resolved, and emitted as map features — not whether each segment is placed on the correct stretch of curb. There is no automated ground-truth accuracy metric yet; see [`pipeline/tests/test_geometry_golden.py`](pipeline/tests/test_geometry_golden.py) for regression coverage on the sample cohort.
+>
+> **Reproducibility:** Full-run numbers depend on locally maintained, gitignored alias tables (`highway_aliases.csv`, `street_aliases.csv`) and the vintage of your Toronto open-data downloads. They are not third-party reproducible without those inputs.
+
 ## Repository layout
 
 | Path | Description |
@@ -63,10 +67,10 @@ Use `-v` / `--verbose` on any stage for debug logging, or set `PARKING_VERBOSE=1
 cd web
 cp .env.example .env    # optional: Google Places API key for address search
 npm ci
-npm run dev
+npm run dev             # runs sync-data first when pipeline output exists
 ```
 
-Copy `pipeline/data/final_parking_map.geojson` to `web/public/data/` (or configure your loader path).
+`npm run sync-data` copies `pipeline/data/final_parking_map.geojson` into `web/public/data/` when present (also runs automatically before `dev` and `build`).
 
 ### Tests
 

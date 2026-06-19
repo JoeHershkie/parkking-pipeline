@@ -5,11 +5,14 @@ Interactive map of geocoded Toronto curb parking bylaws. Data is produced by [`p
 ## Prerequisites
 
 - Node.js 22+ (matches CI)
-- Map data: copy pipeline output into this project:
+- Map data: sync pipeline output into this project:
 
 ```bash
-cp ../pipeline/data/final_parking_map.geojson public/data/
+npm run sync-data
+# or manually: cp ../pipeline/data/final_parking_map.geojson public/data/
 ```
+
+`sync-data` runs automatically before `npm run dev` and `npm run build` when the pipeline file exists.
 
 GeoJSON files under `public/data/` are gitignored; refresh the copy whenever you re-run `parking-run` so features include structured `schedule` objects (`v: 1`).
 
