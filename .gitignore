@@ -11,6 +11,7 @@ pipeline/**/*.py[cod]
 pipeline/.venv/
 pipeline/**/*.egg-info/
 pipeline/.pytest_cache/
+pipeline/build/
 
 # --- Node (web/) ---
 web/node_modules/
