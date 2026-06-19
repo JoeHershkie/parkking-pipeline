@@ -89,21 +89,32 @@ def run_script(script_name: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_verbose_arg(parser)
+    parser.add_argument(
+        '--keep-going',
+        action='store_true',
+        help='Continue remaining stages after a failure (default: stop at first failed stage)',
+    )
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
 
     log.info('Starting full run of parking pipeline...\n')
 
     failed: list[str] = []
+    stage_failed = False
     for module in PIPELINE_MODULES:
         if run_module(module) != 0:
             failed.append(module)
+            stage_failed = True
+            if not args.keep_going:
+                log.error('Stopping pipeline after failed stage (use --keep-going to continue)')
+                break
         log.info('')
 
-    for script_name in ANALYSIS_SCRIPTS:
-        if run_script(script_name) != 0:
-            failed.append(script_name)
-        log.info('')
+    if not stage_failed or args.keep_going:
+        for script_name in ANALYSIS_SCRIPTS:
+            if run_script(script_name) != 0:
+                failed.append(script_name)
+            log.info('')
 
     log.info('=' * 50)
     if not failed:
