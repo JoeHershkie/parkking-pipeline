@@ -1,0 +1,11 @@
+{
+  "block": 26,
+  "block_to_terminus": 3,
+  "dual_anchor": 1,
+  "intersect_extension": 1,
+  "intersect_to_offset": 3,
+  "offset_to_intersect": 4,
+  "parenthetical_block": 1,
+  "perfect_offset": 8,
+  "relative_extension": 3
+}
