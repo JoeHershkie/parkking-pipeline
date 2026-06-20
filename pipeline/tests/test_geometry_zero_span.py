@@ -45,7 +45,10 @@ def geo_env():
 def test_offset_to_intersect_heath_glen_recovers(geo_env) -> None:
     import pandas as pd
 
-    row = pd.read_csv(data_path('parsed_successes.csv'))
+    successes_path = data_path('parsed_successes.csv')
+    if not successes_path.exists():
+        pytest.skip('parsed_successes.csv required (generated locally)')
+    row = pd.read_csv(successes_path)
     fl = pd.read_csv(data_path('failure_ledger.csv'))
     zs = fl[fl['reason_code'] == 'ZERO_SPAN']
     match = zs[

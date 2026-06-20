@@ -10,10 +10,9 @@ from pathlib import Path
 
 DEFAULT_COVERAGE_JSON = Path('coverage.json')
 
-# Floors derived from full-suite coverage after geometry golden regression,
-# with a small buffer for normal fluctuation.
+# Floors calibrated for the committed sample TCL + sample cohort (CI without downloads).
 MODULE_FLOORS: dict[str, float] = {
-    'geo_slice.py': 52.0,
+    'geo_slice.py': 40.0,
     'geometry_engine.py': 25.0,
 }
 

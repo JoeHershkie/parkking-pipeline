@@ -18,6 +18,8 @@ from parking_pipeline.parse_format import (
 )
 from parking_pipeline.resolve_rows import _init_resolve_index, resolve_rows
 
+from sample_data import ensure_sample_data_copies
+
 COORD_PRECISION = 6
 FIXTURES_DIR = Path(__file__).resolve().parent / 'fixtures'
 DEFAULT_SAMPLE_CSV = (
@@ -44,6 +46,7 @@ def geometry_to_coords(geom: BaseGeometry | None) -> list[Any] | None:
 
 
 def setup_geo_env(*, force: bool = True) -> None:
+    ensure_sample_data_copies()
     init_geo(force=force)
     _init_resolve_index()
 
