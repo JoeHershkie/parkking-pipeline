@@ -8,6 +8,8 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from .log_config import add_verbose_arg, setup_logging
@@ -34,13 +36,35 @@ ANALYSIS_SCRIPTS = (
 )
 
 
+@contextmanager
+def _isolated_argv() -> Iterator[None]:
+    """Keep parking-run flags from leaking into stage argparse parsers."""
+    old = sys.argv
+    sys.argv = [old[0]]
+    try:
+        yield
+    finally:
+        sys.argv = old
+
+
+def apply_refresh_env(*, skip: bool, force: bool, verbose: bool) -> None:
+    """Propagate parking-run flags to child stages via environment variables."""
+    if skip:
+        os.environ['PARKING_SKIP_OPENDATA'] = '1'
+    if force:
+        os.environ['PARKING_FORCE_OPENDATA'] = '1'
+    if verbose:
+        os.environ['PARKING_VERBOSE'] = '1'
+
+
 def run_module(module: str) -> int:
     """Run a pipeline stage by importing and calling its main()."""
     try:
         log.info('Running %s...', module)
         mod = importlib.import_module(module)
         main_fn = getattr(mod, 'main')
-        result = main_fn()
+        with _isolated_argv():
+            result = main_fn()
         if result is None:
             result = 0
         if result != 0:
@@ -94,8 +118,19 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='Continue remaining stages after a failure (default: stop at first failed stage)',
     )
+    parser.add_argument(
+        '--skip-refresh',
+        action='store_true',
+        help='Use the existing local bylaw dump; do not contact Toronto Open Data',
+    )
+    parser.add_argument(
+        '--force-refresh',
+        action='store_true',
+        help='Re-download the bylaw dump even if local CKAN metadata still matches',
+    )
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
+    apply_refresh_env(skip=args.skip_refresh, force=args.force_refresh, verbose=args.verbose)
 
     log.info('Starting full run of parking pipeline...\n')
 

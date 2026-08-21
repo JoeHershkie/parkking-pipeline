@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 from functools import lru_cache
+from typing import NamedTuple
 
 import geopandas as gpd
 import pandas as pd
@@ -23,10 +24,20 @@ from .tcl_graph import StreetGraph
 project_to_meters = pyproj.Transformer.from_crs(4326, 32617, always_xy=True).transform
 project_to_gps = pyproj.Transformer.from_crs(32617, 4326, always_xy=True).transform
 
+
+class CentrelineMeta(NamedTuple):
+    """Per-TCL-edge attributes used for curb offset calibration and parity."""
+
+    feature_code_desc: str | None
+    parity_l: str | None
+    parity_r: str | None
+
+
 street_index: dict[str, LineString] = {}
 street_metre_index: dict[str, LineString] = {}
 street_graphs: dict[str, StreetGraph] = {}
 intersections_gdf: gpd.GeoDataFrame | None = None
+centreline_meta: dict[int, CentrelineMeta] = {}
 _timing: dict[str, float] = {}
 
 _CROSS_STREET_KEYS = (
@@ -96,10 +107,42 @@ def _load_tcl() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     return ix_gdf, st_gdf
 
 
+def _meta_str(val: object) -> str | None:
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    if pd.isna(val):
+        return None
+    text = str(val).strip()
+    if not text or text.casefold() in {'none', 'nan', 'null', '<na>'}:
+        return None
+    return text
+
+
+def _build_centreline_meta(st_gdf: gpd.GeoDataFrame) -> dict[int, CentrelineMeta]:
+    out: dict[int, CentrelineMeta] = {}
+    if 'CENTRELINE_ID' not in st_gdf.columns:
+        return out
+    has_fc = 'FEATURE_CODE_DESC' in st_gdf.columns
+    has_pl = 'PARITY_L' in st_gdf.columns
+    has_pr = 'PARITY_R' in st_gdf.columns
+    for _, row in st_gdf.iterrows():
+        cid = row['CENTRELINE_ID']
+        if pd.isna(cid):
+            continue
+        out[int(cid)] = CentrelineMeta(
+            feature_code_desc=_meta_str(row['FEATURE_CODE_DESC']) if has_fc else None,
+            parity_l=_meta_str(row['PARITY_L']) if has_pl else None,
+            parity_r=_meta_str(row['PARITY_R']) if has_pr else None,
+        )
+    return out
+
+
 def _init_indexes(ix_gdf: gpd.GeoDataFrame, st_gdf: gpd.GeoDataFrame) -> None:
     global intersections_gdf, street_index, street_graphs, street_metre_index
+    global centreline_meta
     intersections_gdf = ix_gdf
     tg.configure_intersections(ix_gdf)
+    centreline_meta = _build_centreline_meta(st_gdf)
 
     streets_path = data_path('tcl_streets.geojson')
     cached_graphs = gc.load_street_graphs(streets_path)

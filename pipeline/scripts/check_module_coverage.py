@@ -13,7 +13,10 @@ DEFAULT_COVERAGE_JSON = Path('coverage.json')
 # Floors calibrated for the committed sample TCL + sample cohort (CI without downloads).
 MODULE_FLOORS: dict[str, float] = {
     'geo_slice.py': 40.0,
-    'geometry_engine.py': 25.0,
+    'geometry_engine.py': 35.0,
+    'curb_geometry.py': 70.0,
+    'curb_side.py': 80.0,
+    'road_edges.py': 55.0,
 }
 
 

@@ -1,0 +1,6 @@
+# Curated curb-geometry overrides keyed by source row `_id`.
+# Loaders must ignore lines that start with #.
+# Applied only after parse_side() leaves mode specialized or unresolved.
+# reason: why deterministic side/geometry resolution is insufficient
+# method: selected curb_geometry_method (road_edge, calibrated_offset, centerline_unresolved, ...)
+row_id,reason,method,notes

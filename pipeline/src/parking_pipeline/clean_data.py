@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .failure_ledger import clear_stage, record_failure
+from .opendata import RawDumpError, ensure_raw_parking_dump
 from .paths import data_path
 
 log = logging.getLogger(__name__)
@@ -104,8 +105,15 @@ def unpack_bylaw_table(cell_data) -> UnpackResult:
     if _is_blank(cell_data):
         return UnpackResult({}, UNPACK_EMPTY_TABLE, 'empty ByLaw_Table cell')
 
+    # CKAN datastore CSV wraps the Python-literal list in an extra quoted string.
+    data_list = cell_data
     try:
-        data_list = ast.literal_eval(cell_data)
+        for _ in range(3):
+            if isinstance(data_list, list):
+                break
+            if not isinstance(data_list, str):
+                break
+            data_list = ast.literal_eval(data_list)
     except (ValueError, SyntaxError, TypeError) as e:
         return UnpackResult({}, UNPACK_PARSE_ERROR, str(e)[:500])
 
@@ -226,15 +234,31 @@ def _print_summary(
     log.info('Done! Clean CSV created.')
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     import argparse
 
     from .log_config import add_verbose_arg, setup_logging
 
     parser = argparse.ArgumentParser(description=__doc__)
     add_verbose_arg(parser)
-    args = parser.parse_args()
+    parser.add_argument(
+        '--skip-refresh',
+        action='store_true',
+        help='Use the existing local dump; do not contact Toronto Open Data',
+    )
+    parser.add_argument(
+        '--force-refresh',
+        action='store_true',
+        help='Re-download the dump even if local CKAN metadata still matches',
+    )
+    args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
+
+    try:
+        ensure_raw_parking_dump(force=args.force_refresh, skip=args.skip_refresh)
+    except RawDumpError as exc:
+        log.error('%s', exc)
+        sys.exit(1)
 
     active = load_active_rules()
     if active.empty:

@@ -1,0 +1,23 @@
+{
+  "service_url": "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial3/FeatureServer/3",
+  "query": "SUBTYPE_DESC IN ('Road Edge','Intersection')",
+  "fetch_time": "sample-fixture",
+  "feature_counts": {
+    "Road Edge": 4,
+    "Intersection": 1,
+    "total": 5
+  },
+  "crs": "EPSG:4326",
+  "max_last_geometry_maint": "2024-06-01T00:00:00+00:00",
+  "is_sample_fixture": true,
+  "fixture_cases": [
+    "straight",
+    "curved",
+    "intersection",
+    "divided_north",
+    "divided_south"
+  ],
+  "catalogue_url": "https://open.toronto.ca/dataset/topographic-mapping-edge-of-road/",
+  "catalogue_status": "retired",
+  "notes": "Synthetic fixture covering straight, curved, intersection, and divided-road cases. Not a live FeatureServer extract."
+}

@@ -113,3 +113,42 @@ def save_intersection_postings(
         'fingerprint_csv': fp_csv,
         'postings': postings,
     })
+
+
+def load_road_edges(gpkg_path: Path) -> dict[str, Any] | None:
+    if not cache_enabled():
+        return None
+    fp = file_fingerprint(gpkg_path)
+    path = _cache_path(f'road_edges_{fp}.pkl')
+    payload = _load_pickle(path)
+    if payload is None or payload.get('fingerprint') != fp:
+        return None
+    if payload.get('kind') != 'road_edges' or payload.get('road_edges_version') != 1:
+        return None
+    road_strips = payload.get('road_strips')
+    intersections = payload.get('intersections')
+    if road_strips is None or intersections is None:
+        return None
+    return payload
+
+
+def save_road_edges(
+    gpkg_path: Path,
+    *,
+    road_strips: Any,
+    intersections: Any,
+    manifest: dict[str, Any] | None,
+) -> None:
+    if not cache_enabled():
+        return
+    fp = file_fingerprint(gpkg_path)
+    path = _cache_path(f'road_edges_{fp}.pkl')
+    _save_pickle(path, {
+        'version': _CACHE_VERSION,
+        'kind': 'road_edges',
+        'road_edges_version': 1,
+        'fingerprint': fp,
+        'road_strips': road_strips,
+        'intersections': intersections,
+        'manifest': manifest if manifest is not None else {},
+    })

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from shapely.geometry import LineString, MultiLineString
-from shapely.ops import substring, transform
+from shapely.ops import linemerge, substring, transform
 
 from . import geo_indices as gi
 from . import tcl_graph as tg
@@ -30,7 +30,13 @@ DISCONNECTED_BLOCK = 'DISCONNECTED_BLOCK'
 
 _ZERO_SPAN_DETAIL = 'anchor equals terminus; no mappable span'
 _COLLAPSE_TOL_M = 1e-3
+_RECOVER_BUFFER_M = 1.0
+_RECOVER_MIN_OVERLAP_M = 0.25
 AMBIGUOUS_INTERSECTION = 'AMBIGUOUS_INTERSECTION'
+
+CENTRELINE_BLOCK_PATH = 'block_path'
+CENTRELINE_DISJOINT_BLOCK = 'disjoint_block'
+CENTRELINE_DISTANCE_MERGE = 'distance_merge'
 
 BLOCK_FAMILY_RULES = frozenset({
     'block',
@@ -79,10 +85,66 @@ class SliceResult:
     geometry: LineString | MultiLineString | None
     reason_code: str | None = None
     detail: str | None = None
+    centreline_ids: tuple[int, ...] = ()
+    construction_method: str | None = None
+    merge_dropped_component: bool = False
 
     @property
     def ok(self) -> bool:
         return self.reason_code is None and self.geometry is not None
+
+
+def recover_centreline_ids(highway: str, geom: LineString | MultiLineString | None) -> tuple[int, ...]:
+    """Return TCL ``CENTRELINE_ID`` values whose edges spatially overlap *geom*."""
+    graph = _street_graph(highway)
+    if graph is None or geom is None or geom.is_empty:
+        return ()
+    geom_m = transform(gi.project_to_meters, geom)
+    corridor = geom_m.buffer(_RECOVER_BUFFER_M)
+    ids: list[int] = []
+    for edge in graph.edges:
+        if not edge.line_m.intersects(corridor):
+            continue
+        overlap = edge.line_m.intersection(corridor)
+        if overlap.is_empty:
+            continue
+        if overlap.length >= _RECOVER_MIN_OVERLAP_M:
+            ids.append(edge.centreline_id)
+    return tuple(sorted(set(ids)))
+
+
+def street_merge_dropped_component(highway: str) -> bool:
+    """True when merge-longest discarded a linemerge component for *highway*."""
+    graph = _street_graph(highway)
+    if graph is None or len(graph.edges) < 2:
+        return False
+    merged = linemerge(MultiLineString([edge.line_gps for edge in graph.edges]))
+    return merged.geom_type == 'MultiLineString'
+
+
+def _block_path_slice(geom: LineString | MultiLineString, edges: list) -> SliceResult:
+    return SliceResult(
+        geom,
+        centreline_ids=tuple(tg.path_centreline_ids(edges)),
+        construction_method=CENTRELINE_BLOCK_PATH,
+    )
+
+
+def _disjoint_block_slice(geom: LineString | MultiLineString, highway: str) -> SliceResult:
+    return SliceResult(
+        geom,
+        centreline_ids=recover_centreline_ids(highway, geom),
+        construction_method=CENTRELINE_DISJOINT_BLOCK,
+    )
+
+
+def _distance_merge_slice(geom: LineString | MultiLineString, highway: str) -> SliceResult:
+    return SliceResult(
+        geom,
+        centreline_ids=recover_centreline_ids(highway, geom),
+        construction_method=CENTRELINE_DISTANCE_MERGE,
+        merge_dropped_component=street_merge_dropped_component(highway),
+    )
 
 
 def _terminus_dist_on_line(line_m: LineString, direction: str) -> float:
@@ -275,7 +337,7 @@ def _slice_component_distances(
     if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
         return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
     line_gps = transform(gi.project_to_gps, line_m)
-    return slice_between_distances(line_gps, line_m, d0, d1)
+    return slice_between_distances(line_gps, line_m, d0, d1, highway=highway)
 
 
 def _graph_slice_between_crosses(
@@ -367,7 +429,7 @@ def _path_result_to_slice(pick: PathPick) -> SliceResult:
     geom = tg.slice_path_between(pick.edges, pick.id_start, pick.id_end)
     if geom.is_empty or geom.length == 0:
         return SliceResult(None, GEOMETRY_ERROR, 'zero-length segment')
-    return SliceResult(geom)
+    return _block_path_slice(geom, pick.edges)
 
 
 def _try_disjoint_block_slice(
@@ -389,7 +451,7 @@ def _try_disjoint_block_slice(
     )
     if geom is None or geom.is_empty:
         return None
-    return SliceResult(geom)
+    return _disjoint_block_slice(geom, highway)
 
 
 def _block_pair_failure(
@@ -592,11 +654,13 @@ def slice_block_to_terminus_path(
     geom = tg.slice_path_between(best_path, best_start, best_end)
     if geom.is_empty or geom.length == 0:
         return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
-    return SliceResult(geom)
+    return _block_path_slice(geom, best_path)
 
 
 def slice_between_distances(
     line_gps: LineString, line_m: LineString, d0: float, d1: float,
+    *,
+    highway: str | None = None,
 ) -> SliceResult:
     if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
         return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
@@ -605,8 +669,13 @@ def slice_between_distances(
     sliced_m = substring(line_m, lo, hi)
     if sliced_m.is_empty:
         return SliceResult(None, EMPTY_GEOMETRY, 'empty geometry')
+    if sliced_m.geom_type != 'LineString':
+        return SliceResult(None, EMPTY_GEOMETRY, f'substring returned {sliced_m.geom_type}')
 
-    return SliceResult(transform(gi.project_to_gps, sliced_m))
+    geom = transform(gi.project_to_gps, sliced_m)
+    if highway:
+        return _distance_merge_slice(geom, highway)
+    return SliceResult(geom, construction_method=CENTRELINE_DISTANCE_MERGE)
 
 
 def slice_street(
@@ -689,7 +758,7 @@ def slice_street(
         street_line_m = gi.get_street_line_meters(highway)
 
         if rule_type == 'entire_length':
-            return SliceResult(street_line_gps)
+            return _distance_merge_slice(street_line_gps, highway)
 
         if rule_type == 'terminus_to_terminus':
             d0 = _terminus_dist_on_line(
@@ -698,7 +767,9 @@ def slice_street(
             d1 = _terminus_dist_on_line(
                 street_line_m, parsed_data.get('terminus_end_dir', ''),
             )
-            return slice_between_distances(street_line_gps, street_line_m, d0, d1)
+            return slice_between_distances(
+                street_line_gps, street_line_m, d0, d1, highway=highway,
+            )
 
         if rule_type == 'terminus_end_metric':
             terminus_street = parsed_data.get('terminus_street')
@@ -871,7 +942,9 @@ def slice_street(
             )
             if recovered is not None:
                 return recovered
-            return slice_between_distances(street_line_gps, street_line_m, d0m, d1m)
+            return slice_between_distances(
+                street_line_gps, street_line_m, d0m, d1m, highway=highway,
+            )
 
     except Exception as e:
         log.debug(

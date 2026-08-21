@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +17,14 @@ import geopandas as gpd
 import pandas as pd
 
 from . import geo_indices
+from .curb_geometry import (
+    CONSERVATIVE_GLOBAL_OFFSET_M,
+    OffsetCalibration,
+    flatten_line_geometry,
+    resolve_curb_geometry,
+    write_curb_geometry_qa,
+)
+from .curb_side import load_curb_geometry_overrides, override_for_row, parse_side
 from .failure_ledger import clear_stage, record_failure
 
 # Re-export for scripts and tests that import geometry_engine as ge.
@@ -41,6 +50,9 @@ from .geo_indices import (  # noqa: F401
 from .geo_slice import (  # noqa: F401
     AMBIGUOUS_INTERSECTION,
     BLOCK_FAMILY_RULES,
+    CENTRELINE_BLOCK_PATH,
+    CENTRELINE_DISJOINT_BLOCK,
+    CENTRELINE_DISTANCE_MERGE,
     DISCONNECTED_BLOCK,
     EMPTY_GEOMETRY,
     GEOMETRY_ERROR,
@@ -58,18 +70,27 @@ from .geo_slice import (  # noqa: F401
     intersection_dist_on_street,
     intersection_dist_with_qualifier,
     offset_sign,
+    recover_centreline_ids,
     signed_offset_dist,
     slice_between_distances,
     slice_block_path,
     slice_block_to_terminus_path,
     slice_street,
+    street_merge_dropped_component,
 )
 from .parse_between import PARSE_INVALID
 from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
 from .paths import data_path
+from .road_edges import METRE_CRS, RoadEdgesError, load_road_edge_index
 from .schedule_format import schedule_from_json
 
 log = logging.getLogger(__name__)
+
+_curb_lock = threading.Lock()
+_road_edge_index = None
+_curb_overrides = None
+_offset_calibration = OffsetCalibration()
+_require_road_edges = False
 
 __all__ = [
     name for name in globals()
@@ -79,6 +100,125 @@ __all__ = [
 
 def _row_series_from_values(columns: pd.Index, values: tuple) -> pd.Series:
     return pd.Series(dict(zip(columns, values, strict=True)))
+
+
+def configure_curb_runtime(
+    *,
+    road_index=None,
+    overrides=None,
+    calibration: OffsetCalibration | None = None,
+    require_road_edges: bool = False,
+) -> None:
+    """Inject curb sources for tests or CLI startup."""
+    global _road_edge_index, _curb_overrides, _offset_calibration, _require_road_edges
+    if road_index is not None:
+        _road_edge_index = road_index
+    if overrides is not None:
+        _curb_overrides = overrides
+    if calibration is not None:
+        _offset_calibration = calibration
+    _require_road_edges = require_road_edges
+
+
+def _ensure_road_edge_index():
+    global _road_edge_index
+    if _road_edge_index is not None:
+        return None if _road_edge_index is False else _road_edge_index
+    with _curb_lock:
+        if _road_edge_index is not None:
+            return None if _road_edge_index is False else _road_edge_index
+        try:
+            _road_edge_index = load_road_edge_index(require=_require_road_edges)
+        except RoadEdgesError:
+            if _require_road_edges:
+                raise
+            _road_edge_index = False
+            return None
+        return _road_edge_index
+
+
+def _ensure_curb_overrides() -> dict:
+    global _curb_overrides
+    if _curb_overrides is not None:
+        return _curb_overrides
+    with _curb_lock:
+        if _curb_overrides is None:
+            _curb_overrides = load_curb_geometry_overrides()
+        return _curb_overrides
+
+
+def _attrs_for_centrelines(
+    centreline_ids: tuple[int, ...],
+) -> tuple[str | None, str | None, str | None]:
+    feature_classes: list[str] = []
+    parity_l_vals: list[str] = []
+    parity_r_vals: list[str] = []
+    for cid in centreline_ids:
+        meta = geo_indices.centreline_meta.get(int(cid))
+        if meta is None:
+            continue
+        if meta.feature_code_desc:
+            feature_classes.append(meta.feature_code_desc)
+        if meta.parity_l:
+            parity_l_vals.append(meta.parity_l)
+        if meta.parity_r:
+            parity_r_vals.append(meta.parity_r)
+    return (
+        _unique_or_none(feature_classes),
+        _unique_or_none(parity_l_vals),
+        _unique_or_none(parity_r_vals),
+    )
+
+
+def _unique_or_none(values: list[str]) -> str | None:
+    unique = {value for value in values if value}
+    if len(unique) == 1:
+        return next(iter(unique))
+    return None
+
+
+def _qa_row_from_payload(payload: dict) -> dict:
+    warnings = payload.get('curb_warnings') or []
+    if isinstance(warnings, str):
+        warning_text = warnings
+    else:
+        warning_text = '|'.join(str(code) for code in warnings)
+    centreline_ids = payload.get('centreline_ids') or []
+    object_ids = payload.get('road_edge_object_ids') or []
+    return {
+        'row_id': payload.get('_id'),
+        'highway': payload.get('Highway'),
+        'Side': payload.get('Side'),
+        'side_mode': payload.get('side_mode'),
+        'centreline_ids': ','.join(str(cid) for cid in centreline_ids),
+        'centreline_construction': payload.get('centreline_construction'),
+        'merge_dropped_component': payload.get('merge_dropped_component'),
+        'curb_geometry_method': payload.get('curb_geometry_method'),
+        'curb_confidence': payload.get('curb_confidence'),
+        'curb_coverage': payload.get('curb_coverage'),
+        'median_offset_m': payload.get('median_offset_m'),
+        'road_edge_object_ids': ','.join(str(oid) for oid in object_ids),
+        'curb_override': payload.get('curb_override'),
+        'curb_warnings': warning_text,
+    }
+
+
+def _road_edge_metadata(index) -> dict:
+    if index is None:
+        return {
+            'source': None,
+            'crs': METRE_CRS,
+            'manifest': {},
+            'road_strip_count': 0,
+            'intersection_count': 0,
+        }
+    return {
+        'source': str(index.source_path),
+        'crs': index.crs,
+        'manifest': dict(index.manifest),
+        'road_strip_count': int(len(index.road_strips)),
+        'intersection_count': int(len(index.intersections)),
+    }
 
 
 def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | None]:
@@ -137,17 +277,53 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
         if pd.isna(max_minutes):
             max_minutes = None
         schedule = schedule_from_json(row_s.get('schedule_json'))
+        disjoint_block = result.geometry.geom_type == 'MultiLineString'
+        spec = parse_side(row_s.get('Side'))
+        overrides = _ensure_curb_overrides()
+        override = override_for_row(row_id, spec, overrides)
+        feature_class, parity_l, parity_r = _attrs_for_centrelines(result.centreline_ids)
+        curb = resolve_curb_geometry(
+            result.geometry,
+            spec,
+            road_index=_ensure_road_edge_index(),
+            centreline_ids=result.centreline_ids,
+            construction_method=result.construction_method,
+            feature_class=feature_class,
+            parity_l=parity_l,
+            parity_r=parity_r,
+            calibration=_offset_calibration,
+            override=override,
+        )
+        geom = flatten_line_geometry(curb.geometry)
+        if geom is None:
+            geom = flatten_line_geometry(result.geometry)
+        if geom is None:
+            return failure(EMPTY_GEOMETRY, 'empty geometry')
         props = {
+            '_id': row_id,
             'Highway': display_highway,
             'Rule': row_s['Prohibited Times and/or Days'],
             'schedule_category': row_s.get('schedule_category'),
             'Side': row_s.get('Side'),
+            'side_mode': spec.mode,
+            'centreline_ids': [int(cid) for cid in result.centreline_ids],
+            'centreline_construction': result.construction_method,
+            'merge_dropped_component': bool(result.merge_dropped_component),
+            'curb_geometry_method': curb.method,
+            'curb_confidence': float(curb.confidence),
+            'curb_coverage': float(curb.coverage),
+            'median_offset_m': (
+                None if curb.median_offset_m is None else float(curb.median_offset_m)
+            ),
+            'road_edge_object_ids': [int(oid) for oid in curb.road_edge_object_ids],
+            'curb_override': bool(curb.override),
+            'curb_warnings': list(curb.warnings),
             'max': max_period,
             'maxMinutes': max_minutes,
             'schedule': schedule,
-            'geometry': result.geometry,
+            'geometry': geom,
         }
-        if result.geometry.geom_type == 'MultiLineString':
+        if disjoint_block:
             props['disjoint_block'] = True
         return props, None
 
@@ -191,6 +367,67 @@ def _format_duration(seconds: float) -> str:
     minutes = int(seconds // 60)
     remainder = seconds % 60
     return f"{minutes}m {remainder:.1f}s"
+
+
+class _SliceProgress:
+    """Per-row slice progress for the terminal (count, percent, elapsed, ETA)."""
+
+    _LOG_INTERVAL_S = 2.0
+    _PAINT_INTERVAL_S = 0.2
+
+    def __init__(self, total: int) -> None:
+        self.total = max(0, total)
+        self.done = 0
+        self.start = time.perf_counter()
+        self._last_log_at = 0.0
+        self._last_paint_at = 0.0
+        self._last_logged_pct = -1
+
+    def advance(self) -> None:
+        self.done += 1
+        self._emit(final=False)
+
+    def finish(self) -> None:
+        if self.total == 0:
+            self.done = 0
+        elif self.done < self.total:
+            self.done = self.total
+        self._emit(final=True)
+
+    def _line(self) -> str:
+        elapsed = time.perf_counter() - self.start
+        total = self.total
+        done = self.done
+        pct = 100.0 if total == 0 else (100.0 * done / total)
+        rate = done / elapsed if elapsed > 0 else 0.0
+        parts = [
+            f'Slice {done}/{total} ({pct:.1f}%)',
+            f'elapsed {_format_duration(elapsed)}',
+        ]
+        if rate > 0:
+            parts.append(f'{rate:.1f} rows/s')
+            if done < total:
+                parts.append(f'ETA {_format_duration((total - done) / rate)}')
+        return '   ' + '  '.join(parts)
+
+    def _emit(self, *, final: bool) -> None:
+        line = self._line()
+        now = time.perf_counter()
+        pct = 100 if self.total == 0 else int(100 * self.done / self.total)
+        commit = final or self.done == 1 or (now - self._last_log_at) >= self._LOG_INTERVAL_S
+        if pct != self._last_logged_pct and pct % 5 == 0:
+            commit = True
+        paint = commit or (now - self._last_paint_at) >= self._PAINT_INTERVAL_S
+        if not paint:
+            return
+
+        sys.stderr.write('\r' + line + '          ')
+        if commit:
+            sys.stderr.write('\n')
+            self._last_log_at = now
+            self._last_logged_pct = pct
+        sys.stderr.flush()
+        self._last_paint_at = now
 
 
 def _print_timing_summary(
@@ -244,12 +481,27 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     add_verbose_arg(parser)
+    parser.add_argument(
+        '--require-road-edges',
+        action='store_true',
+        help=(
+            'Fail if the local topographic Road Edge GeoPackage is missing '
+            'instead of copying the sample fixture'
+        ),
+    )
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
 
     main_start = time.perf_counter()
 
     init_geo()
+    configure_curb_runtime(require_road_edges=args.require_road_edges)
+    try:
+        _ensure_road_edge_index()
+        _ensure_curb_overrides()
+    except RoadEdgesError as exc:
+        log.error('%s', exc)
+        return 2
 
     log.info("3. Loading Parsed Successes CSV...")
     t0 = time.perf_counter()
@@ -300,15 +552,19 @@ def main(argv: list[str] | None = None) -> int:
             failure_counts[fail_rec['reason_code']] += 1
 
     t0 = time.perf_counter()
+    progress = _SliceProgress(len(row_args))
     if workers > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for payload, fail_rec in pool.map(
-                _process_geo_row, row_args, chunksize=64,
+                _process_geo_row, row_args, chunksize=8,
             ):
                 _apply_row_outcome(payload, fail_rec)
+                progress.advance()
     else:
         for args in row_args:
             _apply_row_outcome(*_process_geo_row(args))
+            progress.advance()
+    progress.finish()
     slice_sec = time.perf_counter() - t0
 
     log.info(f"\n5. Exporting {len(results)} zones to GeoJSON...")
@@ -325,6 +581,23 @@ def main(argv: list[str] | None = None) -> int:
         gdf.set_crs(epsg=4326, inplace=True)
         out_path = data_path('final_parking_map.geojson')
         geojson = json.loads(gdf.to_json())
+        method_counts = Counter(
+            str(row.get('curb_geometry_method') or '') for row in results
+        )
+        confidences = [
+            float(row['curb_confidence'])
+            for row in results
+            if isinstance(row.get('curb_confidence'), int | float)
+        ]
+        road_index = _ensure_road_edge_index()
+        qa_rows = [_qa_row_from_payload(row) for row in results]
+        write_curb_geometry_qa(
+            qa_rows,
+            extra_summary={
+                'road_edges_manifest': dict(road_index.manifest) if road_index else {},
+                'conservative_global_offset_m': CONSERVATIVE_GLOBAL_OFFSET_M,
+            },
+        )
         geojson['metadata'] = {
             'generated_at': datetime.now(UTC).isoformat(),
             'pipeline_version': _pipeline_version(),
@@ -332,6 +605,14 @@ def main(argv: list[str] | None = None) -> int:
             'input_row_count': len(batch_df),
             'tcl_streets_mtime': _source_mtime('tcl_streets.geojson'),
             'tcl_intersections_mtime': _source_mtime('tcl_intersections.geojson'),
+            'road_edges': _road_edge_metadata(road_index),
+            'curb_geometry': {
+                'methods': dict(method_counts),
+                'mean_confidence': (
+                    sum(confidences) / len(confidences) if confidences else 0.0
+                ),
+                'conservative_global_offset_m': CONSERVATIVE_GLOBAL_OFFSET_M,
+            },
         }
         with out_path.open('w', encoding='utf-8') as f:
             json.dump(geojson, f)

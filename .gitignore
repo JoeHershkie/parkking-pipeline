@@ -24,6 +24,8 @@ web/.env
 
 # --- Pipeline generated outputs ---
 pipeline/data/toronto_raw_parking_dump.csv
+pipeline/data/toronto_raw_parking_dump.manifest.json
+pipeline/data/toronto_raw_parking_dump.csv.partial
 pipeline/data/clean_parking_targets.csv
 pipeline/data/parsed_successes.csv
 pipeline/data/parsed_schedules.csv
@@ -34,6 +36,10 @@ pipeline/data/final_parking_map.geojson
 pipeline/data/intersection_failure_analysis.csv
 pipeline/data/street_failure_analysis.csv
 pipeline/data/geometry_failure_analysis.csv
+pipeline/data/curb_geometry_qa.csv
+pipeline/data/curb_geometry_qa_summary.json
+pipeline/data/curb_geometry_qa_samples.geojson
+pipeline/data/curb_geometry_qa_samples_summary.json
 pipeline/data/street_alias_suggestions.csv
 pipeline/data/highway_resolution_audit.json
 pipeline/data/intersection_failure_summary.json
@@ -49,6 +55,8 @@ pipeline/data/tcl_intersections.geojson
 pipeline/data/tcl_street_names.csv
 pipeline/data/street_aliases.csv
 pipeline/data/highway_aliases.csv
+pipeline/data/topographic_road_edges.gpkg
+pipeline/data/topographic_road_edges.manifest.json
 
 # --- Web runtime data ---
 web/public/data/*.geojson

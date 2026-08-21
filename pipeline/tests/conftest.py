@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import geopandas as gpd
 import pytest
+from sample_data import ensure_sample_data_copies, using_sample_tcl
 
 from parking_pipeline.paths import data_path
-from sample_data import ensure_sample_data_copies, using_sample_tcl
 
 _REQUIRED_TEST_STREETS = {
     'test_intersection_pair_resolve.py': (
@@ -31,11 +31,6 @@ _PARSED_ARTIFACT_TESTS = {
     'test_offset_to_intersect_heath_glen_recovers',
 }
 
-_GEOMETRY_GOLDEN_TESTS = {
-    'test_geometry_golden_matches_fixture',
-    'test_geometry_golden_exercises_geo_slice',
-}
-
 ensure_sample_data_copies()
 
 
@@ -57,14 +52,6 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if item.name in _PARSED_ARTIFACT_TESTS and not parsed_successes.exists():
             item.add_marker(
                 pytest.mark.skip(reason='parsed_successes.csv required (generated locally)'),
-            )
-            continue
-
-        if item.name in _GEOMETRY_GOLDEN_TESTS and not using_sample_tcl():
-            item.add_marker(
-                pytest.mark.skip(
-                    reason='geometry golden regression uses committed sample TCL fixtures',
-                ),
             )
             continue
 
