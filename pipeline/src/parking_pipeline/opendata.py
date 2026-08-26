@@ -10,6 +10,7 @@ Catalogue: https://open.toronto.ca/dataset/traffic-and-parking-by-law-schedules/
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import os
@@ -34,6 +35,7 @@ USER_AGENT = 'parking-pipeline/opendata'
 REQUIRED_COLUMNS = ('_id', 'Latest_Action', 'scheduleName', 'ByLaw_Table')
 PACKAGE_TIMEOUT_SEC = 30
 DUMP_TIMEOUT_SEC = 300
+DATASTORE_PAGE_SIZE = 10000
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -206,7 +208,8 @@ def _csv_header(path: Path) -> list[str]:
     return [col.strip().lstrip('\ufeff') for col in first.strip().split(',')]
 
 
-def validate_dump_csv(path: Path) -> None:
+def validate_dump_csv(path: Path, *, expected_records: int | None = None) -> int:
+    """Validate that the CSV exists, contains required columns, and is not truncated."""
     if not path.exists() or path.stat().st_size == 0:
         raise RawDumpError(f'Downloaded dump is empty: {path}')
     header = _csv_header(path)
@@ -216,13 +219,117 @@ def validate_dump_csv(path: Path) -> None:
             f'Downloaded dump is missing columns {missing}; header={header[:12]}'
         )
 
+    row_count = 0
+    try:
+        with path.open(encoding='utf-8', newline='', errors='replace') as handle:
+            reader = csv.reader(handle, strict=True)
+            next(reader, None)  # header
+            for _ in reader:
+                row_count += 1
+    except Exception as exc:
+        raise RawDumpError(f'Downloaded dump is malformed or truncated: {exc}') from exc
 
-def _download_dump(url: str, dest: Path) -> None:
+    if row_count == 0:
+        raise RawDumpError(f'Downloaded dump contains no data rows: {path}')
+
+    if expected_records is not None and expected_records > 0:
+        if row_count != expected_records:
+            raise RawDumpError(
+                f'Downloaded dump record count mismatch: expected {expected_records}, got {row_count}'
+            )
+
+    return row_count
+
+
+def _download_datastore_csv(
+    resource_id: str,
+    dest: Path,
+    *,
+    expected_count: int | None = None,
+    page_size: int = DATASTORE_PAGE_SIZE,
+) -> None:
+    """Download records via CKAN's datastore_search API in pages and stream to CSV."""
+    offset = 0
+    writer: csv.DictWriter | None = None
+    total = expected_count
+
+    with dest.open('w', encoding='utf-8', newline='') as out:
+        while True:
+            params = {
+                'resource_id': resource_id,
+                'limit': str(page_size),
+                'offset': str(offset),
+            }
+            url = f'{CKAN_BASE_URL}/api/3/action/datastore_search'
+            data = _http_get_json(url, params)
+            records = data.get('records', [])
+            if total is None and 'total' in data:
+                try:
+                    total = int(data['total'])
+                except (ValueError, TypeError):
+                    total = None
+
+            if writer is None:
+                fields = data.get('fields', [])
+                if fields and isinstance(fields, list):
+                    fieldnames = [
+                        f['id'] if isinstance(f, dict) and 'id' in f else str(f)
+                        for f in fields
+                    ]
+                elif records:
+                    fieldnames = list(records[0].keys())
+                else:
+                    fieldnames = list(REQUIRED_COLUMNS)
+
+                writer = csv.DictWriter(
+                    out,
+                    fieldnames=fieldnames,
+                    extrasaction='ignore',
+                    lineterminator='\n',
+                )
+                writer.writeheader()
+
+            for rec in records:
+                writer.writerow(rec)
+
+            count_fetched = len(records)
+            offset += count_fetched
+
+            if total:
+                log.info('Fetched %d/%d records...', min(offset, total), total)
+            else:
+                log.info('Fetched %d records...', offset)
+
+            if count_fetched == 0:
+                break
+            if total is not None and offset >= total:
+                break
+
+
+def _download_dump(resource: dict[str, Any], dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_name(dest.name + '.partial')
+    resource_id = resource.get('id')
+    expected_count = int(resource.get('record_count') or 0) or None
+
     try:
-        _http_download_to(url, partial, timeout=DUMP_TIMEOUT_SEC)
-        validate_dump_csv(partial)
+        downloaded = False
+        if resource.get('datastore_active') and resource_id:
+            try:
+                _download_datastore_csv(
+                    resource_id,
+                    partial,
+                    expected_count=expected_count,
+                )
+                downloaded = True
+            except RawDumpError as exc:
+                log.warning('datastore_search failed (%s); trying direct dump URL', exc)
+
+        if not downloaded:
+            url = dump_url_for(resource)
+            _http_download_to(url, partial, timeout=DUMP_TIMEOUT_SEC)
+
+        validate_dump_csv(partial, expected_records=expected_count)
         partial.replace(dest)
     finally:
         if partial.exists():
@@ -262,14 +369,13 @@ def ensure_raw_parking_dump(*, force: bool = False, skip: bool = False) -> Path:
         )
         return dest
 
-    url = dump_url_for(resource)
     log.info(
         'Refreshing %s from Toronto Open Data (%s records)...',
         dest.name,
         fingerprint.get('record_count'),
     )
     try:
-        _download_dump(url, dest)
+        _download_dump(resource, dest)
     except RawDumpError:
         if dest.exists() and not force:
             log.warning('Open Data dump download failed; using existing %s', dest)

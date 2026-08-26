@@ -1,4 +1,5 @@
 import csv
+import time
 from pathlib import Path
 
 from .paths import data_path
@@ -9,6 +10,7 @@ LEDGER_COLUMNS = [
 
 # Intentional pipeline policy — excluded from ledger/triage (not actionable failures).
 LEDGER_EXCLUDED_REASON_CODES = frozenset({'DUPLICATE_RULE'})
+MAX_FILE_RETRIES = 5
 
 
 def _ledger_path() -> Path:
@@ -20,13 +22,30 @@ def clear_stage(stage: str) -> None:
     path = _ledger_path()
     if not path.exists():
         return
-    with path.open(newline='', encoding='utf-8') as f:
-        rows = list(csv.DictReader(f))
+
+    rows: list[dict] = []
+    for attempt in range(MAX_FILE_RETRIES):
+        try:
+            with path.open(newline='', encoding='utf-8') as f:
+                rows = list(csv.DictReader(f))
+            break
+        except (TimeoutError, OSError):
+            if attempt + 1 >= MAX_FILE_RETRIES:
+                raise
+            time.sleep(0.2 * (2 ** attempt))
+
     remaining = [r for r in rows if r.get('stage') != stage]
-    with path.open('w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=LEDGER_COLUMNS)
-        writer.writeheader()
-        writer.writerows(remaining)
+    for attempt in range(MAX_FILE_RETRIES):
+        try:
+            with path.open('w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=LEDGER_COLUMNS)
+                writer.writeheader()
+                writer.writerows(remaining)
+            break
+        except (TimeoutError, OSError):
+            if attempt + 1 >= MAX_FILE_RETRIES:
+                raise
+            time.sleep(0.2 * (2 ** attempt))
 
 
 def record_failure(
@@ -41,16 +60,23 @@ def record_failure(
     """Append one failure row. ``between`` is source; ``between_parsed_input`` is parse regex input."""
     path = _ledger_path()
     write_header = not path.exists()
-    with path.open('a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=LEDGER_COLUMNS)
-        if write_header:
-            writer.writeheader()
-        writer.writerow({
-            'row_id': row_id,
-            'stage': stage,
-            'reason_code': reason_code,
-            'detail': detail,
-            'highway': highway,
-            'between': between,
-            'between_parsed_input': between_parsed_input,
-        })
+    for attempt in range(MAX_FILE_RETRIES):
+        try:
+            with path.open('a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=LEDGER_COLUMNS)
+                if write_header:
+                    writer.writeheader()
+                writer.writerow({
+                    'row_id': row_id,
+                    'stage': stage,
+                    'reason_code': reason_code,
+                    'detail': detail,
+                    'highway': highway,
+                    'between': between,
+                    'between_parsed_input': between_parsed_input,
+                })
+            break
+        except (TimeoutError, OSError):
+            if attempt + 1 >= MAX_FILE_RETRIES:
+                raise
+            time.sleep(0.2 * (2 ** attempt))

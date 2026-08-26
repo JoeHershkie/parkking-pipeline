@@ -18,6 +18,13 @@ DUMP_CSV = (
     '1,Enacted,Schedule 13: No Parking,"[{""key"": ""Highway"", ""value"": ""Main St""}]"\n'
 )
 
+SAMPLE_RECORD = {
+    '_id': 1,
+    'Latest_Action': 'Enacted',
+    'scheduleName': 'Schedule 13: No Parking',
+    'ByLaw_Table': '[{"key": "Highway", "value": "Main St"}]',
+}
+
 SIDECAR_RESOURCE = {
     'id': 'files-json-id',
     'name': 'Traffic and parking by-law schedules',
@@ -33,7 +40,7 @@ DATASTORE_RESOURCE = {
     'name': 'Traffic and parking by-law schedules data',
     'datastore_active': True,
     'format': 'JSON',
-    'record_count': 76_849,
+    'record_count': 1,
     'last_modified': None,
     'metadata_modified': '2026-05-18T02:27:53.675515',
     'datastore_cache_last_update': '2026-05-18T02:27:53.243962',
@@ -47,6 +54,23 @@ def _package(**resource_overrides) -> dict:
         'last_refreshed': '2026-08-20 13:59:23',
         'resources': [resource, SIDECAR_RESOURCE],
     }
+
+
+def _datastore_search_body(
+    records: list[dict] | None = None,
+    total: int | None = None,
+) -> bytes:
+    recs = [SAMPLE_RECORD] if records is None else records
+    tot = len(recs) if total is None else total
+    fields = [{'id': k} for k in (recs[0].keys() if recs else od.REQUIRED_COLUMNS)]
+    return json.dumps({
+        'success': True,
+        'result': {
+            'records': recs,
+            'total': tot,
+            'fields': fields,
+        },
+    }).encode()
 
 
 class FakeResponse:
@@ -104,12 +128,43 @@ def test_select_dump_resource_requires_datastore():
         od.select_dump_resource(package)
 
 
+def test_validate_dump_csv_truncated(tmp_path):
+    bad_csv = tmp_path / 'bad.csv'
+    bad_csv.write_text(
+        '_id,Latest_Action,scheduleName,ByLaw_Table\n'
+        '1,Enacted,Schedule 13: No Parking,"unclosed quote here...\n',
+        encoding='utf-8',
+    )
+    with pytest.raises(RawDumpError, match='malformed or truncated'):
+        od.validate_dump_csv(bad_csv)
+
+
+def test_validate_dump_csv_missing_columns(tmp_path):
+    bad_csv = tmp_path / 'missing.csv'
+    bad_csv.write_text('_id,other_col\n1,val\n', encoding='utf-8')
+    with pytest.raises(RawDumpError, match='missing columns'):
+        od.validate_dump_csv(bad_csv)
+
+
+def test_validate_dump_csv_record_count_mismatch(tmp_path):
+    csv_file = tmp_path / 'count.csv'
+    csv_file.write_text(DUMP_CSV, encoding='utf-8')
+    with pytest.raises(RawDumpError, match='record count mismatch'):
+        od.validate_dump_csv(csv_file, expected_records=5)
+
+
+def test_validate_dump_csv_success(tmp_path):
+    csv_file = tmp_path / 'valid.csv'
+    csv_file.write_text(DUMP_CSV, encoding='utf-8')
+    assert od.validate_dump_csv(csv_file, expected_records=1) == 1
+
+
 def test_ensure_downloads_when_missing(dump_dir, monkeypatch, no_sleep):
     _install_http(
         monkeypatch,
         {
             'package_show': _ckan_body(_package()),
-            'datastore/dump/datastore-id': DUMP_CSV.encode(),
+            'datastore_search': _datastore_search_body(),
         },
     )
     path = od.ensure_raw_parking_dump()
@@ -118,7 +173,22 @@ def test_ensure_downloads_when_missing(dump_dir, monkeypatch, no_sleep):
     assert 'ByLaw_Table' in header
     manifest = json.loads((dump_dir / od.RAW_DUMP_MANIFEST_FILENAME).read_text())
     assert manifest['resource_id'] == 'datastore-id'
-    assert manifest['record_count'] == 76_849
+    assert manifest['record_count'] == 1
+
+
+def test_ensure_fallback_when_search_fails(dump_dir, monkeypatch, no_sleep):
+    _install_http(
+        monkeypatch,
+        {
+            'package_show': _ckan_body(_package()),
+            'datastore_search': URLError('search error'),
+            'datastore/dump/datastore-id': DUMP_CSV.encode(),
+        },
+    )
+    path = od.ensure_raw_parking_dump()
+    assert path.exists()
+    header = path.read_text(encoding='utf-8').splitlines()[0]
+    assert 'ByLaw_Table' in header
 
 
 def test_ensure_skips_download_when_current(dump_dir, monkeypatch, no_sleep):
@@ -138,7 +208,7 @@ def test_ensure_skips_download_when_current(dump_dir, monkeypatch, no_sleep):
 
     monkeypatch.setattr(od, 'urlopen', fake_urlopen)
     od.ensure_raw_parking_dump()
-    assert calls and all('datastore/dump' not in url for url in calls)
+    assert calls and all('datastore' not in url for url in calls)
 
 
 def test_ensure_redownloads_when_record_count_changes(dump_dir, monkeypatch, no_sleep):
@@ -146,16 +216,17 @@ def test_ensure_redownloads_when_record_count_changes(dump_dir, monkeypatch, no_
     dest.write_text(DUMP_CSV, encoding='utf-8')
     od.write_manifest(od.resource_fingerprint(_package(), DATASTORE_RESOURCE))
 
+    records = [SAMPLE_RECORD, {**SAMPLE_RECORD, '_id': 2}]
     _install_http(
         monkeypatch,
         {
-            'package_show': _ckan_body(_package(record_count=77_000)),
-            'datastore/dump/datastore-id': DUMP_CSV.encode(),
+            'package_show': _ckan_body(_package(record_count=2)),
+            'datastore_search': _datastore_search_body(records=records, total=2),
         },
     )
     od.ensure_raw_parking_dump()
     manifest = json.loads((dump_dir / od.RAW_DUMP_MANIFEST_FILENAME).read_text())
-    assert manifest['record_count'] == 77_000
+    assert manifest['record_count'] == 2
 
 
 def test_force_redownloads_current_dump(dump_dir, monkeypatch, no_sleep):
@@ -168,9 +239,9 @@ def test_force_redownloads_current_dump(dump_dir, monkeypatch, no_sleep):
         url = req.full_url if isinstance(req, Request) else str(req)
         if 'package_show' in url:
             return FakeResponse(_ckan_body(_package()))
-        if 'datastore/dump' in url:
+        if 'datastore_search' in url:
             downloaded['n'] += 1
-            return FakeResponse(DUMP_CSV.encode())
+            return FakeResponse(_datastore_search_body())
         raise AssertionError(url)
 
     monkeypatch.setattr(od, 'urlopen', fake_urlopen)
@@ -226,6 +297,7 @@ def test_invalid_csv_does_not_replace_existing(dump_dir, monkeypatch, no_sleep):
         monkeypatch,
         {
             'package_show': _ckan_body(_package(record_count=99)),
+            'datastore_search': b'not json',
             'datastore/dump/datastore-id': b'not,a,valid,parking,dump\n1,2,3\n',
         },
     )

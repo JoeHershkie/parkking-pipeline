@@ -290,3 +290,84 @@ def test_parse_rows_empty_prohibition_schedules_become_anytime() -> None:
     assert len(parsed) == 2
     assert set(parsed['_id']) == {12771, 18303}
     assert (parsed['schedule_status'] == 'anytime').all()
+
+
+def test_full_month_and_weekday_names() -> None:
+    s = parse_schedule('8:00 a.m. to 6:00 p.m., Monday to Friday, from June 1 to August 31, inclusive')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [1, 2, 3, 4, 5]
+    mr = s['windows'][0]['calendar']['monthRanges'][0]
+    assert mr['startMonth'] == 6 and mr['endMonth'] == 8
+
+
+def test_explicit_calendar_year_range() -> None:
+    s = parse_schedule('7:00 a.m. to 9:00 p.m. from and including Mon., June 6, 2022 to and including Sun., June 12, 2022')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['startMinute'] == 420
+    assert s['windows'][0]['endMinute'] == 1260
+    mr = s['windows'][0]['calendar']['monthRanges'][0]
+    assert mr['startMonth'] == 6 and mr['startDay'] == 6 and mr['endMonth'] == 6 and mr['endDay'] == 12
+
+
+def test_day_of_month_with_seasonal_tail() -> None:
+    s = parse_schedule('16th day to the last day of each month, from Apr. 1 to Nov. 30, inclusive')
+    assert s['status'] == 'ok'
+    cal = s['windows'][0]['calendar']
+    assert cal['dayOfMonthRanges'][0] == {'start': 16, 'end': 'last'}
+    assert cal['monthRanges'][0] == {'startMonth': 4, 'startDay': 1, 'endMonth': 11, 'endDay': 30}
+
+
+def test_except_sat_and_sun_and_holidays() -> None:
+    s = parse_schedule('4:00 p.m. to 6:00 p.m., except Sat., Sun. and public holidays')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [1, 2, 3, 4, 5]
+    assert s['flags']['exceptPublicHolidays'] is True
+
+
+def test_each_weekday_time_range() -> None:
+    s = parse_schedule('8:00 a.m. to 4:00 p.m., each Thurs., Apr. 1 to Nov. 30, inclusive')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [4]
+    assert s['windows'][0]['startMinute'] == 480
+    assert s['windows'][0]['calendar']['monthRanges'][0]['startMonth'] == 4
+
+
+def test_ordinal_weekday_schedule() -> None:
+    s = parse_schedule('1st and 3rd Wed. of each month, Apr. 1st to Nov. 30th, inclusive')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [3]
+    assert s['windows'][0]['calendar']['monthRanges'][0] == {'startMonth': 4, 'startDay': 1, 'endMonth': 11, 'endDay': 30}
+
+
+def test_except_months_and_holidays() -> None:
+    s = parse_schedule('8:00 a.m. to 4:00 p.m. Monday to Friday except July, August & Public Holidays')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['days'] == [1, 2, 3, 4, 5]
+    assert s['flags']['exceptPublicHolidays'] is True
+    assert 7 not in s['windows'][0]['calendar']['months']
+    assert 8 not in s['windows'][0]['calendar']['months']
+    assert 6 in s['windows'][0]['calendar']['months']
+
+
+def test_all_times_and_standalone_month_list() -> None:
+    s1 = parse_schedule('All times')
+    assert s1['status'] == 'anytime'
+
+    s2 = parse_schedule('Anytime, May, Jul., Sep. and Nov.')
+    assert s2['status'] == 'ok'
+    assert s2['windows'][0]['calendar']['months'] == [5, 7, 9, 11]
+
+
+def test_typo_normalizations() -> None:
+    s = parse_schedule('Anyitme')
+    assert s['status'] == 'anytime'
+
+    s2 = parse_schedule('7:00 a.m. to 9:00 a.m., Mon. to Frii, except pubic holidays')
+    assert s2['status'] == 'ok'
+    assert s2['windows'][0]['days'] == [1, 2, 3, 4, 5]
+    assert s2['flags']['exceptPublicHolidays'] is True
+
+    s3 = parse_schedule('2 a.m. to 6 a.m., Mon. to Fri.')
+    assert s3['status'] == 'ok'
+    assert s3['windows'][0]['startMinute'] == 120
+
