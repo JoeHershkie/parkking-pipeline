@@ -1,62 +1,54 @@
-# --- Monorepo root ---
+# --- Global OS & IDEs ---
 .DS_Store
 .idea/
 .vscode/
 .cursor/
 
-# --- Python (pipeline/) ---
-pipeline/__pycache__/
-pipeline/**/__pycache__/
-pipeline/**/*.py[cod]
-pipeline/.venv/
-pipeline/**/*.egg-info/
-pipeline/.pytest_cache/
-pipeline/build/
-pipeline/.coverage
-
-# --- Node (web/) ---
-web/node_modules/
-web/dist/
-web/dist-ssr/
-web/coverage/
-web/*.local
-web/.env
+# --- Python ---
+__pycache__/
+**/__pycache__/
+**/*.py[cod]
+.venv/
+**/*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+.coverage
+coverage.json
 
 # --- Pipeline generated outputs ---
-pipeline/data/toronto_raw_parking_dump.csv
-pipeline/data/toronto_raw_parking_dump.manifest.json
-pipeline/data/toronto_raw_parking_dump.csv.partial
-pipeline/data/clean_parking_targets.csv
-pipeline/data/parsed_successes.csv
-pipeline/data/parsed_schedules.csv
-pipeline/data/failure_ledger.csv
-pipeline/data/failure_triage.csv
-pipeline/data/failure_triage_summary.json
-pipeline/data/final_parking_map.geojson
-pipeline/data/intersection_failure_analysis.csv
-pipeline/data/street_failure_analysis.csv
-pipeline/data/geometry_failure_analysis.csv
-pipeline/data/curb_geometry_qa.csv
-pipeline/data/curb_geometry_qa_summary.json
-pipeline/data/curb_geometry_qa_samples.geojson
-pipeline/data/curb_geometry_qa_samples_summary.json
-pipeline/data/street_alias_suggestions.csv
-pipeline/data/highway_resolution_audit.json
-pipeline/data/intersection_failure_summary.json
-pipeline/data/street_failure_summary.json
-pipeline/data/normalizer_rule_evaluation.json
-pipeline/data/phase_a_baseline_summary.json
-pipeline/data/*.pdf
-pipeline/data/.geo_cache/
+data/toronto_raw_parking_dump.csv
+data/toronto_raw_parking_dump.manifest.json
+data/toronto_raw_parking_dump.csv.partial
+data/clean_parking_targets.csv
+data/parsed_successes.csv
+data/parsed_schedules.csv
+data/failure_ledger.csv
+data/failure_triage.csv
+data/failure_triage_summary.json
+data/final_parking_map.geojson
+data/geometry_failure_analysis.csv
+data/intersection_failure_analysis.csv
+data/intersection_failure_summary.json
+data/street_failure_analysis.csv
+data/street_failure_summary.json
+data/curb_geometry_qa.csv
+data/curb_geometry_qa_summary.json
+data/curb_geometry_qa_samples.geojson
+data/curb_geometry_qa_samples_summary.json
+data/street_alias_suggestions.csv
+data/highway_resolution_audit.json
+data/normalizer_rule_evaluation.json
+data/phase_a_baseline_summary.json
+data/*.pdf
+data/.geo_cache/
 
-# --- Pipeline external data (download locally) ---
-pipeline/data/tcl_streets.geojson
-pipeline/data/tcl_intersections.geojson
-pipeline/data/tcl_street_names.csv
-pipeline/data/street_aliases.csv
-pipeline/data/highway_aliases.csv
-pipeline/data/topographic_road_edges.gpkg
-pipeline/data/topographic_road_edges.manifest.json
-
-# --- Web runtime data ---
-web/public/data/*.geojson
+# --- Pipeline external data (downloaded locally) ---
+data/tcl_streets.geojson
+data/tcl_intersections.geojson
+data/tcl_street_names.csv
+data/street_aliases.csv
+data/highway_aliases.csv
+data/topographic_road_edges.gpkg
+data/topographic_road_edges.manifest.json

@@ -12,7 +12,7 @@ fi
 
 echo "Installing parking-pipeline (editable) ..."
 "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel
-"$VENV/bin/python" -m pip install -e "${ROOT}/pipeline[dev]"
+"$VENV/bin/python" -m pip install -e "${ROOT}[dev]"
 
 echo ""
 echo "Done. Activate the environment:"

@@ -2,14 +2,9 @@ name: Pipeline CI
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'pipeline/**'
-      - '.github/workflows/pipeline-ci.yml'
+    branches: [main, develop]
   pull_request:
-    paths:
-      - 'pipeline/**'
-      - '.github/workflows/pipeline-ci.yml'
+    branches: [main, develop]
 
 jobs:
   test:
@@ -17,9 +12,6 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12', '3.13', '3.14']
-    defaults:
-      run:
-        working-directory: pipeline
     steps:
       - uses: actions/checkout@v4
 
