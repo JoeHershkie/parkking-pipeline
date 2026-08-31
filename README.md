@@ -46,15 +46,25 @@ For a technical deep-dive on schemas, failure codes, and geometry algorithms, se
 ### Installation & Setup
 
 ```bash
-./scripts/setup.sh          # One-time setup: creates .venv and installs in editable mode
+# Automated setup (macOS / Linux):
+./scripts/setup.sh
+source .venv/bin/activate
+
+# Or manual setup (cross-platform):
+python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
 ### Running Pipeline Stages
 
-Execute stages sequentially or use `parking-run` for the end-to-end flow:
+Execute the full pipeline end-to-end or run individual stages sequentially:
 
 ```bash
+# End-to-end run (all stages + failure triage analysis):
+parking-run
+
+# Or run stages individually:
 parking-clean               # Fetch/refresh toronto_raw_parking_dump.csv from Open Data
 parking-parse-schedule      # Parse temporal bylaws into structured schedules
 parking-parse-between       # Extract geographic boundaries from legal descriptions

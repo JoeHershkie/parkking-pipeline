@@ -1,18 +1,17 @@
 # Toronto parking bylaws — pipeline deep-dive
 
-Python ETL for Toronto parking bylaws. **Start at the [monorepo README](../../README.md)** for setup, data downloads, and tests. The interactive map lives in [`web/`](../../web/).
+Python ETL for Toronto parking bylaws. See the root [README.md](../README.md) for quick start, installation, and CLI usage. Frontends live in [parkking-ios](https://github.com/JoeHershkie/parkking-ios) and [parkking-web](https://github.com/JoeHershkie/parkking-web).
 
-## Repository layout (monorepo)
+## Repository layout
 
 ```
 parking-pipeline/          # repo root
-├── pipeline/
-│   ├── data/              # Source dumps, generated CSVs, TCL / Road Edge, map output
-│   ├── docs/              # This documentation
-│   ├── scripts/           # Analysis, triage, fixture builders, one-time downloaders
-│   ├── src/parking_pipeline/   # Installable package
-│   └── tests/
-└── web/                   # React + MapLibre map UI
+├── data/                  # Source dumps, generated CSVs, TCL / Road Edge, map output
+├── docs/                  # Architecture, schema, and local dev documentation
+├── scripts/               # Analysis, triage, fixture builders, one-time downloaders
+├── src/parking_pipeline/  # Core ETL library and CLI entry points
+├── tests/                 # Unit tests, integration tests, golden regression suites
+└── pyproject.toml         # Package dependencies and configuration
 ```
 
 ## Pipeline overview
@@ -65,15 +64,18 @@ From the repo root (first time or after pull):
 source .venv/bin/activate
 ```
 
-From `pipeline/`:
+Running stages:
 
 ```bash
+# End-to-end:
+parking-run
+
+# Or sequentially:
 parking-clean      # fetches/refreshes toronto_raw_parking_dump.csv from Open Data
 parking-parse-schedule
 parking-parse-between
 parking-resolve    # auto-refreshes tcl_street_names.csv when stale
 parking-geo
-# Or run all stages + analysis: parking-run
 # Full-city maps: parking-geo --require-road-edges  (after downloading Road Edge once)
 ```
 
@@ -83,7 +85,7 @@ Use `-v` / `--verbose` on any stage for debug logging, or set `PARKING_VERBOSE=1
 
 **Geometry env vars:** `GEO_LIMIT` — cap rows processed (omit for full `parsed_successes.csv`). `GEO_WORKERS` — thread pool size (`0` = sequential). Threading helps I/O-bound steps; CPU-heavy Shapely work may see limited speedup under the GIL.
 
-Paths resolve via [`src/parking_pipeline/paths.py`](../src/parking_pipeline/paths.py) (`data/` is relative to `pipeline/`).
+Paths resolve via [`src/parking_pipeline/paths.py`](../src/parking_pipeline/paths.py) (`data/` is relative to repo root).
 
 ## Console scripts
 
@@ -144,7 +146,7 @@ Committed [`data/samples/`](../data/samples/) fixtures let tests and CI run with
 
 Produced by [`parse_schedule.py`](../src/parking_pipeline/parse_schedule.py) / [`schedule_format.py`](../src/parking_pipeline/schedule_format.py). Embedded in GeoJSON as the `schedule` property (`v: 1`).
 
-**Membership filter:** `overlaps_membership(schedule, slot)` — same contract implemented in Python and in [`web/src/lib/schedule/`](../../web/src/lib/schedule/). Cross-language parity is enforced by [`tests/fixtures/schedule_corpus.json`](../tests/fixtures/schedule_corpus.json) (regenerate via `PYTHONPATH=src python scripts/build_schedule_corpus.py`).
+**Membership filter:** `overlaps_membership(schedule, slot)` — same contract implemented in Python and in the web client ([parkking-web](https://github.com/JoeHershkie/parkking-web)). Cross-language parity is enforced by [`tests/fixtures/schedule_corpus.json`](../tests/fixtures/schedule_corpus.json) (regenerate via `PYTHONPATH=src python scripts/build_schedule_corpus.py`).
 
 | Slot field | Required | Notes |
 |------------|----------|--------|
@@ -210,9 +212,9 @@ Curb warning codes on emitted features (below) are **not** ledger failures. Ambi
 
 ### Road Edge as a local source
 
-Same class of file as `tcl_streets.geojson`: download once, keep it under `pipeline/data/`, reuse it on every `parking-geo` run. The Open Data catalogue page is retired ([Topographic Mapping - Edge of Road](https://open.toronto.ca/dataset/topographic-mapping-edge-of-road/)) even though the official FeatureServer remains live. There is no shapefile URL, so acquisition is a helper script — not a runtime fetch.
+Same class of file as `tcl_streets.geojson`: download once, keep it under `data/`, reuse it on every `parking-geo` run. The Open Data catalogue page is retired ([Topographic Mapping - Edge of Road](https://open.toronto.ca/dataset/topographic-mapping-edge-of-road/)) even though the official FeatureServer remains live. There is no shapefile URL, so acquisition is a helper script — not a runtime fetch.
 
-From `pipeline/` (venv active):
+From repo root (venv active):
 
 ```bash
 python scripts/fetch_topographic_road_edges.py
@@ -327,12 +329,11 @@ Writes `data/failure_triage.csv` and `data/failure_triage_summary.json` with `fi
 ## Tests
 
 ```bash
-cd pipeline
 pytest
 ruff check src tests scripts
 ```
 
-Schedule parity: `tests/test_schedule_corpus.py` and `web/src/lib/schedule/corpus.test.ts` share `tests/fixtures/schedule_corpus.json`. Curb-side / Road Edge / curb-geometry tests live in `tests/test_curb_side.py`, `tests/test_road_edges.py`, and `tests/test_curb_geometry.py`.
+Schedule parity: `tests/test_schedule_corpus.py` shares `tests/fixtures/schedule_corpus.json` with the web client. Curb-side / Road Edge / curb-geometry tests live in `tests/test_curb_side.py`, `tests/test_road_edges.py`, and `tests/test_curb_geometry.py`.
 
 ## Data sources
 
@@ -357,4 +358,4 @@ Schedule parity: `tests/test_schedule_corpus.py` and `web/src/lib/schedule/corpu
 
 - **Parse coverage** — new `parse_between` patterns for remaining `PARSE_NO_MATCH` rows
 - **Geometry** — further intersection/street matching edge cases
-- **Web** — see [`web/README.md`](../../web/README.md)
+- **Web** — see [parkking-web](https://github.com/JoeHershkie/parkking-web)
