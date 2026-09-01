@@ -112,6 +112,27 @@ def run_script(script_name: str) -> int:
         return exc.returncode
 
 
+def ensure_auxiliary_datasets(*, force: bool = False, skip: bool = False) -> None:
+    """Ensure auxiliary geospatial layers (municipal boundaries, permit zones, hydrants) are available."""
+    try:
+        from .municipal_rules import ensure_former_municipality_boundaries
+        ensure_former_municipality_boundaries(force=force, skip=skip)
+    except Exception as exc:
+        log.warning('Could not refresh municipal boundaries: %s', exc)
+
+    try:
+        from .permit_zones import ensure_permit_parking_areas
+        ensure_permit_parking_areas(force=force, skip=skip)
+    except Exception as exc:
+        log.warning('Could not refresh permit parking areas: %s', exc)
+
+    try:
+        from .hydrants import ensure_fire_hydrants
+        ensure_fire_hydrants(force=force, skip=skip)
+    except Exception as exc:
+        log.warning('Could not refresh fire hydrants: %s', exc)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_verbose_arg(parser)
@@ -146,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     log.info('Starting full run of parking pipeline...\n')
+    ensure_auxiliary_datasets(force=args.force_refresh, skip=args.skip_refresh)
 
     failed: list[str] = []
     stage_failed = False

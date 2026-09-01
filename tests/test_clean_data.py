@@ -107,3 +107,56 @@ def test_load_active_rules_filters_repealed(tmp_path, monkeypatch) -> None:
 
     df = load_active_rules()
     assert list(df['_id']) == [1]
+
+
+def test_clean_row_winter_maintenance_defaults() -> None:
+    from parking_pipeline.clean_data import _clean_row
+    raw = pd.Series({
+        '_id': 71093,
+        'scheduleName': 'SCHEDULE IV: Former City of North York Winter Maintenance Parking Prohibited',
+    })
+    fields = {
+        'Highway': 'Ettrick Crescent',
+        'Between': 'Boylen Street and the west end of Ettrick Crescent',
+    }
+    cleaned = _clean_row(raw, fields)
+    assert cleaned['schedule_category'] == 'winter_maintenance'
+    assert cleaned['Side'] == 'Both'
+    assert cleaned['Prohibited Times and/or Days'] == '2:00 a.m. to 6:00 a.m. from Dec. 1 to Mar. 31'
+
+
+def test_clean_row_snow_route_defaults() -> None:
+    from parking_pipeline.clean_data import _clean_row
+    raw = pd.Series({
+        '_id': 73869,
+        'scheduleName': 'SCHEDULE XVIIA: Parking And Standing during Major Snow Storm Conditions',
+    })
+    fields = {
+        'Highway': 'Dundas Street West',
+        'Between': 'Runnymede Road and Yonge Street',
+    }
+    cleaned = _clean_row(raw, fields)
+    assert cleaned['schedule_category'] == 'snow_route'
+    assert cleaned['Side'] == 'Both'
+    assert cleaned['Prohibited Times and/or Days'] == 'Major Snow Storm Conditions'
+
+
+def test_clean_row_ev_charging_fields() -> None:
+    from parking_pipeline.clean_data import _clean_row
+    raw = pd.Series({
+        '_id': 72321,
+        'scheduleName': 'SCHEDULE XLIV: Electrical Vehicle Charging Station Parking',
+    })
+    fields = {
+        'Highway': 'Bowmore Road',
+        'Side Parking': 'East',
+        'Between': 'A point 13.7 metres north of Eastwood Road and a point 6 metres further north',
+        'Hours (daily as indicated below)': 'Anytime',
+        'Maximum Period Parking': '12 hours',
+    }
+    cleaned = _clean_row(raw, fields)
+    assert cleaned['schedule_category'] == 'ev_charging'
+    assert cleaned['Side'] == 'East'
+    assert cleaned['Prohibited Times and/or Days'] == 'Anytime'
+    assert cleaned['Maximum Period Permitted'] == '12 hours'
+

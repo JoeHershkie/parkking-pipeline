@@ -79,9 +79,12 @@ from .geo_slice import (  # noqa: F401
     slice_street,
     street_merge_dropped_component,
 )
+from .hydrants import HYDRANTS_FILENAME, FireHydrantIndex
+from .municipal_rules import MUNICIPAL_BOUNDARIES_FILENAME, MunicipalBoundaryIndex
 from .parse_between import PARSE_INVALID
 from .parse_format import _parse_valid_flag, _resolve_valid_flag, highway_from_row, row_to_parsed
 from .paths import data_path
+from .permit_zones import PERMIT_AREAS_FILENAME, PermitZoneIndex
 from .road_edges import METRE_CRS, RoadEdgesError, load_road_edge_index
 from .schedule_format import schedule_from_json
 
@@ -92,6 +95,9 @@ _road_edge_index = None
 _curb_overrides = None
 _offset_calibration = OffsetCalibration()
 _require_road_edges = False
+_municipal_index = None
+_permit_index = None
+_hydrant_index = None
 
 __all__ = [
     name for name in globals()
@@ -109,9 +115,13 @@ def configure_curb_runtime(
     overrides=None,
     calibration: OffsetCalibration | None = None,
     require_road_edges: bool = False,
+    municipal_index=None,
+    permit_index=None,
+    hydrant_index=None,
 ) -> None:
     """Inject curb sources for tests or CLI startup."""
     global _road_edge_index, _curb_overrides, _offset_calibration, _require_road_edges
+    global _municipal_index, _permit_index, _hydrant_index
     if road_index is not None:
         _road_edge_index = road_index
     if overrides is not None:
@@ -119,6 +129,72 @@ def configure_curb_runtime(
     if calibration is not None:
         _offset_calibration = calibration
     _require_road_edges = require_road_edges
+    if municipal_index is not None:
+        _municipal_index = municipal_index
+    if permit_index is not None:
+        _permit_index = permit_index
+    if hydrant_index is not None:
+        _hydrant_index = hydrant_index
+
+
+def _ensure_municipal_index():
+    global _municipal_index
+    if _municipal_index is not None:
+        return None if _municipal_index is False else _municipal_index
+    with _curb_lock:
+        if _municipal_index is not None:
+            return None if _municipal_index is False else _municipal_index
+        path = data_path(MUNICIPAL_BOUNDARIES_FILENAME)
+        if not path.exists():
+            _municipal_index = False
+            return None
+        try:
+            _municipal_index = MunicipalBoundaryIndex()
+        except Exception as exc:
+            log.warning('Failed to load municipal boundaries index (%s)', exc)
+            _municipal_index = False
+            return None
+        return _municipal_index
+
+
+def _ensure_permit_index():
+    global _permit_index
+    if _permit_index is not None:
+        return None if _permit_index is False else _permit_index
+    with _curb_lock:
+        if _permit_index is not None:
+            return None if _permit_index is False else _permit_index
+        path = data_path(PERMIT_AREAS_FILENAME)
+        if not path.exists():
+            _permit_index = False
+            return None
+        try:
+            _permit_index = PermitZoneIndex()
+        except Exception as exc:
+            log.warning('Failed to load permit zones index (%s)', exc)
+            _permit_index = False
+            return None
+        return _permit_index
+
+
+def _ensure_hydrant_index():
+    global _hydrant_index
+    if _hydrant_index is not None:
+        return None if _hydrant_index is False else _hydrant_index
+    with _curb_lock:
+        if _hydrant_index is not None:
+            return None if _hydrant_index is False else _hydrant_index
+        path = data_path(HYDRANTS_FILENAME)
+        if not path.exists():
+            _hydrant_index = False
+            return None
+        try:
+            _hydrant_index = FireHydrantIndex()
+        except Exception as exc:
+            log.warning('Failed to load fire hydrants index (%s)', exc)
+            _hydrant_index = False
+            return None
+        return _hydrant_index
 
 
 def _ensure_road_edge_index():
@@ -300,11 +376,12 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
             geom = flatten_line_geometry(result.geometry)
         if geom is None:
             return failure(EMPTY_GEOMETRY, 'empty geometry')
+        cat = row_s.get('schedule_category')
         props = {
             '_id': row_id,
             'Highway': display_highway,
             'Rule': row_s['Prohibited Times and/or Days'],
-            'schedule_category': row_s.get('schedule_category'),
+            'schedule_category': cat,
             'Side': row_s.get('Side'),
             'side_mode': spec.mode,
             'centreline_ids': [int(cid) for cid in result.centreline_ids],
@@ -324,6 +401,32 @@ def _process_geo_row(args: tuple[pd.Index, tuple]) -> tuple[dict | None, dict | 
             'schedule': schedule,
             'geometry': geom,
         }
+        if cat in ('snow_route', 'snow_streetcar'):
+            props['is_snow_route'] = True
+            if cat == 'snow_streetcar':
+                props['streetcar_corridor'] = True
+
+        mun_idx = _ensure_municipal_index()
+        if mun_idx is not None:
+            mun_tags = mun_idx.tag_feature(geom)
+            props['former_municipality'] = mun_tags.get('former_municipality')
+            if mun_tags.get('regional_winter_rule'):
+                props['regional_winter_rule'] = mun_tags['regional_winter_rule']
+
+        permit_idx = _ensure_permit_index()
+        if permit_idx is not None:
+            permit_tags = permit_idx.tag_feature(geom)
+            props['permit_area_id'] = permit_tags.get('permit_area_id')
+            if permit_tags.get('permit_parking_active'):
+                props['permit_parking_active'] = True
+
+        hydrant_idx = _ensure_hydrant_index()
+        if hydrant_idx is not None:
+            hydrant_tags = hydrant_idx.tag_feature(geom)
+            if hydrant_tags.get('has_hydrant'):
+                props['has_hydrant'] = True
+                props['hydrant_count'] = hydrant_tags['hydrant_count']
+                props['hydrant_setback_m'] = 3.0
         if disjoint_block:
             props['disjoint_block'] = True
         return props, None

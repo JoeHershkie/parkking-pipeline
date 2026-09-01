@@ -682,3 +682,66 @@ def test_require_road_edges_raises_when_source_missing(monkeypatch):
         ge._ensure_road_edge_index()
     ge._require_road_edges = False
     ge._road_edge_index = None
+
+
+def test_process_geo_row_spatial_enrichment(monkeypatch):
+    from parking_pipeline import geometry_engine as ge
+    from parking_pipeline.hydrants import FireHydrantIndex
+    from parking_pipeline.municipal_rules import MunicipalBoundaryIndex
+    from parking_pipeline.permit_zones import PermitZoneIndex
+
+    # Setup fake indexes
+    poly_mun = Polygon([(-80, 43), (-79, 43), (-79, 44), (-80, 44)])
+    gdf_mun = gpd.GeoDataFrame({'AREA_NAME': ['NORTH YORK']}, geometry=[poly_mun], crs='EPSG:4326')
+    mun_idx = MunicipalBoundaryIndex(gdf_mun)
+
+    poly_permit = Polygon([(-79.5, 43.6), (-79.4, 43.6), (-79.4, 43.7), (-79.5, 43.7)])
+    gdf_permit = gpd.GeoDataFrame({'AREA_LONG_CODE': ['1C'], 'AREA_NAME': ['1C']}, geometry=[poly_permit], crs='EPSG:4326')
+    permit_idx = PermitZoneIndex(gdf_permit)
+
+    hydrant_pt = Point(-79.45, 43.65)
+    gdf_hydrant = gpd.GeoDataFrame({'_id': [1], 'FACILITYID': ['HY123']}, geometry=[hydrant_pt], crs='EPSG:4326')
+    hydrant_idx = FireHydrantIndex(gdf_hydrant)
+
+    ge.configure_curb_runtime(
+        road_index=False,
+        overrides={},
+        municipal_index=mun_idx,
+        permit_index=permit_idx,
+        hydrant_index=hydrant_idx,
+    )
+
+    class FakeSlice:
+        ok = True
+        geometry = LineString([(-79.46, 43.65), (-79.44, 43.65)])
+        centreline_ids = [100]
+        construction_method = CENTRELINE_DISTANCE_MERGE
+        merge_dropped_component = False
+        reason_code = None
+        detail = None
+
+    monkeypatch.setattr(ge, 'slice_street', lambda *_a, **_k: FakeSlice())
+
+    columns = [
+        '_id', 'Highway', 'Between', 'Prohibited Times and/or Days',
+        'Side', 'parse_valid', 'resolve_valid', 'rule_type',
+        'schedule_json', 'schedule_category', 'Maximum Period Permitted',
+        'max_minutes',
+    ]
+    values = (
+        'row-10', 'Dundas Street West', 'A and B', 'Major Snow Storm Conditions',
+        'North', True, True, 'entire_length',
+        '{}', 'snow_streetcar', None, None,
+    )
+
+    success, failure = ge._process_geo_row((pd.Index(columns), values))
+    assert failure is None
+    assert success is not None
+    assert success['schedule_category'] == 'snow_streetcar'
+    assert success['is_snow_route'] is True
+    assert success['streetcar_corridor'] is True
+    assert success['former_municipality'] == 'NORTH YORK'
+    assert success['permit_area_id'] == '1C'
+    assert success['has_hydrant'] is True
+    assert success['hydrant_count'] == 1
+

@@ -45,6 +45,7 @@ data/*.pdf
 data/baseline_run/
 data/branches/
 data/.geo_cache/
+data/branches/
 
 # --- Pipeline external data (downloaded locally) ---
 data/tcl_streets.geojson

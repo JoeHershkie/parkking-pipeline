@@ -371,3 +371,40 @@ def test_typo_normalizations() -> None:
     assert s3['status'] == 'ok'
     assert s3['windows'][0]['startMinute'] == 120
 
+
+def test_snow_route_conditional_schedule() -> None:
+    s = parse_schedule('Major Snow Storm Conditions')
+    assert s['status'] == 'conditional'
+    assert s['is_snow_route'] is True
+    assert s['condition'] == 'major_snowstorm_declared'
+    # Without snowstorm active in slot -> False
+    assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 900, 'month': 1, 'dayOfMonth': 15}) is False
+    # With majorSnowStorm active in slot -> True
+    assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 900, 'month': 1, 'dayOfMonth': 15, 'majorSnowStorm': True}) is True
+
+
+def test_empty_times_default_categories() -> None:
+    winter_row = pd.Series({'schedule_category': 'winter_maintenance'})
+    assert empty_times_default(winter_row) == '2:00 a.m. to 6:00 a.m. from Dec. 1 to Mar. 31'
+
+    snow_row = pd.Series({'schedule_category': 'snow_route'})
+    assert empty_times_default(snow_row) == 'Major Snow Storm Conditions'
+
+    streetcar_row = pd.Series({'schedule_category': 'snow_streetcar'})
+    assert empty_times_default(streetcar_row) == 'Major Snow Storm Conditions'
+
+    car_share_row = pd.Series({'schedule_category': 'car_share'})
+    assert empty_times_default(car_share_row) == 'Anytime'
+
+
+def test_winter_maintenance_dec_to_mar() -> None:
+    s = parse_schedule('2:00 a.m. to 6:00 a.m. from Dec. 1 to Mar. 31')
+    assert s['status'] == 'ok'
+    # Jan 15 at 3am (minute 180) -> True
+    assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 180, 'month': 1, 'dayOfMonth': 15, 'year': 2026}) is True
+    # Jan 15 at 12pm (minute 720) -> False
+    assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 720, 'month': 1, 'dayOfMonth': 15, 'year': 2026}) is False
+    # Jul 15 at 3am (minute 180) -> False
+    assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 180, 'month': 7, 'dayOfMonth': 15, 'year': 2026}) is False
+
+

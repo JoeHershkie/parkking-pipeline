@@ -1242,6 +1242,16 @@ def parse_schedule(source: Any) -> dict:
             'windows': [],
         }
 
+    if 'snow storm condition' in normalized or 'snow emergency' in normalized:
+        return {
+            'v': SCHEDULE_VERSION,
+            'status': 'conditional',
+            'condition': 'major_snowstorm_declared',
+            'is_snow_route': True,
+            'source': raw_source,
+            'windows': [],
+        }
+
     month_list_sched = _parse_month_list_schedule(text, raw_source)
     if month_list_sched is not None:
         return month_list_sched
@@ -1399,6 +1409,10 @@ def overlaps_membership(schedule: dict | None, slot: dict[str, int]) -> bool:
         return not any(
             _except_window_matches(w, slot, schedule, schedule_cal) for w in windows
         )
+    if status == 'conditional':
+        if schedule.get('condition') == 'major_snowstorm_declared':
+            return bool(slot.get('majorSnowStorm'))
+        return False
     if status == 'anytime':
         return True
     for window in windows:

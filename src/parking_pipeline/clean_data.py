@@ -36,6 +36,42 @@ _SCHEDULE_CATEGORIES: dict[str, tuple[str, ...]] = {
         'Schedule 16: No Standing',
         'SCHEDULE XVI: No Standing',
     ),
+    'winter_maintenance': (
+        'Schedule 04: Former City of North York Winter Maintenance Parking Prohibited',
+        'SCHEDULE IV: Former City of North York Winter Maintenance Parking Prohibited',
+    ),
+    'snow_route': (
+        'SCHEDULE XVIIA: Parking And Standing during Major Snow Storm Conditions',
+        'Schedule 17A: Parking And Standing during Major Snow Storm Conditions',
+    ),
+    'snow_streetcar': (
+        'SCHEDULE XVIIB: Parking/Standing on or Blocking Streetcar Tracks during Major Snow Storm Conditions',
+        'Schedule 17B: Parking/Standing on or Blocking Streetcar Tracks during Major Snow Storm Conditions',
+    ),
+    'ev_charging': (
+        'Schedule 44: Electrical Vehicle Charging Station Parking',
+        'SCHEDULE XLIV: Electrical Vehicle Charging Station Parking',
+    ),
+    'car_share': (
+        'Schedule 43: Car Share Vehicle Parking Areas',
+        'SCHEDULE XLIII: Car Share Vehicle Parking Areas',
+    ),
+    'commercial_loading': (
+        'Schedule 06: Commercial Loading Zones',
+        'SCHEDULE VI: Commercial Loading Zones',
+    ),
+    'passenger_loading': (
+        'Schedule 07: Passenger Loading Zones',
+        'SCHEDULE VII: Passenger Loading Zones',
+    ),
+    'delivery_loading': (
+        'Schedule 09: Delivery Vehicle Parking Zones',
+        'SCHEDULE IX: Delivery Vehicle Parking Zones',
+    ),
+    'taxicab_stand': (
+        'Schedule 05: Stands for Taxicabs',
+        'SCHEDULE V: Stands for Taxicabs',
+    ),
 }
 
 ALLOWED_SCHEDULE_NAMES = frozenset(
@@ -46,11 +82,6 @@ SCHEDULE_CATEGORY_BY_NAME = {
     for category, names in _SCHEDULE_CATEGORIES.items()
     for name in names
 }
-
-# Optional schedules — add names to _SCHEDULE_CATEGORIES when enabling:
-# winter_maintenance: Schedule 04 / SCHEDULE IV (North York winter)
-# snow_storm: SCHEDULE XVIIA
-# snow_streetcar: SCHEDULE XVIIB
 
 # --- Failure reason codes (clean stage) ---
 
@@ -134,12 +165,38 @@ def unpack_bylaw_table(cell_data) -> UnpackResult:
     return UnpackResult(fields)
 
 
-def prohibited_times(fields: dict):
+def extract_side(fields: dict, category: str) -> str | None:
+    side = fields.get('Side') or fields.get('Side Parking')
+    if _is_blank(side) and category in ('winter_maintenance', 'snow_route', 'snow_streetcar'):
+        return 'Both'
+    return side
+
+
+def extract_between(fields: dict) -> str | None:
+    return fields.get('Between') or fields.get('Location')
+
+
+def extract_max_period(fields: dict) -> str | None:
+    return fields.get('Maximum Period Permitted') or fields.get('Maximum Period Parking')
+
+
+def prohibited_times(fields: dict, category: str = ''):
     """Map API fields to the single prohibited-times column used downstream."""
+    if category == 'winter_maintenance':
+        return '2:00 a.m. to 6:00 a.m. from Dec. 1 to Mar. 31'
+    if category in ('snow_route', 'snow_streetcar'):
+        return 'Major Snow Storm Conditions'
+    if category == 'car_share':
+        return 'Anytime'
+
     prohibited = fields.get('Prohibited Times and/or Days')
-    times = fields.get('Times and/or Days')
+    times = (
+        fields.get('Times and/or Days')
+        or fields.get('Hours (daily as indicated below)')
+        or fields.get('Hours')
+    )
     if _is_blank(prohibited) and _is_blank(times):
-        between = fields.get('Between')
+        between = extract_between(fields)
         if between and re.search(r'\banytime\b', str(between), re.IGNORECASE):
             return 'Anytime'
     if _is_blank(prohibited):
@@ -154,15 +211,16 @@ def _norm_cell(val) -> str:
 
 
 def _clean_row(row_id: object, schedule_name: object, fields: dict) -> dict:
+    cat = schedule_category(str(schedule_name))
     return {
         '_id': row_id,
         'scheduleName': schedule_name,
-        'schedule_category': schedule_category(str(schedule_name)),
+        'schedule_category': cat,
         'Highway': fields.get('Highway'),
-        'Side': fields.get('Side'),
-        'Between': fields.get('Between'),
-        'Prohibited Times and/or Days': prohibited_times(fields),
-        'Maximum Period Permitted': fields.get('Maximum Period Permitted'),
+        'Side': extract_side(fields, cat),
+        'Between': extract_between(fields),
+        'Prohibited Times and/or Days': prohibited_times(fields, cat),
+        'Maximum Period Permitted': extract_max_period(fields),
     }
 
 

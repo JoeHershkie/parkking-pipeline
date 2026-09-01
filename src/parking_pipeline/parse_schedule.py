@@ -24,6 +24,7 @@ _EMPTY_TIMES_DEFAULT_CATEGORIES = frozenset({
     'no_parking',
     'no_stopping',
     'no_standing',
+    'car_share',
 })
 
 
@@ -38,6 +39,10 @@ def empty_times_default(row: pd.Series | dict | str) -> str | None:
         category = str(row.get('schedule_category', '')).strip()
     else:
         category = str(row.get('schedule_category', '')).strip()
+    if category == 'winter_maintenance':
+        return '2:00 a.m. to 6:00 a.m. from Dec. 1 to Mar. 31'
+    if category in ('snow_route', 'snow_streetcar'):
+        return 'Major Snow Storm Conditions'
     if category in _EMPTY_TIMES_DEFAULT_CATEGORIES:
         return EMPTY_TIMES_DEFAULT
     return None
