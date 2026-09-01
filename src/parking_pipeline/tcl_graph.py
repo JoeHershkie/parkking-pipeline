@@ -73,9 +73,11 @@ def configure_intersections(ix_gdf: gpd.GeoDataFrame) -> None:
     global _intersections_gdf, _node_points_gps
     _intersections_gdf = ix_gdf
     ix_index.configure(ix_gdf)
+    id_col = ix_gdf['INTERSECTION_ID'].to_numpy()
+    geoms = ix_gdf.geometry.values
     _node_points_gps = {
-        int(row['INTERSECTION_ID']): row.geometry.centroid
-        for _, row in ix_gdf.iterrows()
+        int(ix_id): g.centroid
+        for ix_id, g in zip(id_col, geoms, strict=True)
     }
 
 
@@ -94,19 +96,28 @@ def build_street_graphs(st_gdf: gpd.GeoDataFrame) -> dict[str, StreetGraph]:
     """One undirected graph per legal street name (lowercased)."""
     name_lower = st_gdf['LINEAR_NAME_FULL_LEGAL'].str.lower()
     graphs: dict[str, StreetGraph] = {}
+
+    col_idx = {c: st_gdf.columns.get_loc(c) for c in st_gdf.columns}
+    from_idx = col_idx.get('FROM_INTERSECTION_ID')
+    to_idx = col_idx.get('TO_INTERSECTION_ID')
+    cid_idx = col_idx.get('CENTRELINE_ID')
+    geom_idx = col_idx.get('geometry')
+
     for s_name, group in st_gdf.groupby(name_lower, sort=False):
         edges: list[StreetEdge] = []
-        for _, row in group.iterrows():
-            from_id = row.get('FROM_INTERSECTION_ID')
-            to_id = row.get('TO_INTERSECTION_ID')
-            if pd.isna(from_id) or pd.isna(to_id):
+        for tup in group.itertuples(index=False, name=None):
+            from_id = tup[from_idx] if from_idx is not None else None
+            to_id = tup[to_idx] if to_idx is not None else None
+            if from_id is None or to_id is None or pd.isna(from_id) or pd.isna(to_id):
                 continue
-            line_gps = _linestring_part(row.geometry)
+            geom = tup[geom_idx] if geom_idx is not None else None
+            line_gps = _linestring_part(geom)
             if line_gps is None:
                 continue
             line_m = transform(project_to_meters, line_gps)
+            cid = tup[cid_idx]
             edges.append(StreetEdge(
-                centreline_id=int(row['CENTRELINE_ID']),
+                centreline_id=int(cid),
                 from_id=int(from_id),
                 to_id=int(to_id),
                 line_gps=line_gps,

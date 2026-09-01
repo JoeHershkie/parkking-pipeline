@@ -47,7 +47,7 @@ def _isolated_argv() -> Iterator[None]:
         sys.argv = old
 
 
-def apply_refresh_env(*, skip: bool, force: bool, verbose: bool) -> None:
+def apply_refresh_env(*, skip: bool, force: bool, verbose: bool, workers: str | None = None) -> None:
     """Propagate parking-run flags to child stages via environment variables."""
     if skip:
         os.environ['PARKING_SKIP_OPENDATA'] = '1'
@@ -55,6 +55,8 @@ def apply_refresh_env(*, skip: bool, force: bool, verbose: bool) -> None:
         os.environ['PARKING_FORCE_OPENDATA'] = '1'
     if verbose:
         os.environ['PARKING_VERBOSE'] = '1'
+    if workers is not None:
+        os.environ['GEO_WORKERS'] = str(workers)
 
 
 def run_module(module: str) -> int:
@@ -128,9 +130,20 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='Re-download the bylaw dump even if local CKAN metadata still matches',
     )
+    parser.add_argument(
+        '-w', '--workers',
+        type=str,
+        default=None,
+        help='Worker processes for geometry slicing (e.g. 4, auto; default: GEO_WORKERS env or 0 for sequential)',
+    )
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
-    apply_refresh_env(skip=args.skip_refresh, force=args.force_refresh, verbose=args.verbose)
+    apply_refresh_env(
+        skip=args.skip_refresh,
+        force=args.force_refresh,
+        verbose=args.verbose,
+        workers=args.workers,
+    )
 
     log.info('Starting full run of parking pipeline...\n')
 

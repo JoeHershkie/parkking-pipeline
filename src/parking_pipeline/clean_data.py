@@ -153,11 +153,11 @@ def _norm_cell(val) -> str:
     return '' if _is_blank(val) else str(val).strip().casefold()
 
 
-def _clean_row(raw: pd.Series, fields: dict) -> dict:
+def _clean_row(row_id: object, schedule_name: object, fields: dict) -> dict:
     return {
-        '_id': raw['_id'],
-        'scheduleName': raw['scheduleName'],
-        'schedule_category': schedule_category(raw['scheduleName']),
+        '_id': row_id,
+        'scheduleName': schedule_name,
+        'schedule_category': schedule_category(str(schedule_name)),
         'Highway': fields.get('Highway'),
         'Side': fields.get('Side'),
         'Between': fields.get('Between'),
@@ -171,9 +171,17 @@ def unpack_rows(active: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
     rows: list[dict] = []
     failure_counts: Counter = Counter()
 
-    for _, raw in active.iterrows():
-        result = unpack_bylaw_table(raw['ByLaw_Table'])
-        row_id = raw['_id']
+    col_idx = {c: active.columns.get_loc(c) for c in active.columns}
+    id_idx = col_idx['_id']
+    sched_idx = col_idx['scheduleName']
+    tbl_idx = col_idx['ByLaw_Table']
+
+    for tup in active.itertuples(index=False, name=None):
+        row_id = tup[id_idx]
+        sched_name = tup[sched_idx]
+        raw_tbl = tup[tbl_idx]
+
+        result = unpack_bylaw_table(raw_tbl)
         highway = result.fields.get('Highway', '')
         between = result.fields.get('Between', '')
 
@@ -182,7 +190,7 @@ def unpack_rows(active: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
             failure_counts[result.reason] += 1
             continue
 
-        rows.append(_clean_row(raw, result.fields))
+        rows.append(_clean_row(row_id, sched_name, result.fields))
 
     return pd.DataFrame(rows, columns=OUTPUT_COLUMNS), failure_counts
 
@@ -190,10 +198,11 @@ def unpack_rows(active: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
 def deduplicate_rules(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """Keep the lowest _id per DEDUP_KEYS group; drop later duplicates (not ledger failures)."""
     work = df.copy()
-    work['_dedup_key'] = work[DEDUP_KEYS].apply(
-        lambda row: tuple(_norm_cell(v) for v in row),
-        axis=1,
-    )
+    norm_cols = [
+        work[c].fillna('').astype(str).str.strip().str.casefold()
+        for c in DEDUP_KEYS
+    ]
+    work['_dedup_key'] = list(zip(*norm_cols, strict=True))
     work['_id_num'] = pd.to_numeric(work['_id'], errors='coerce')
 
     keepers = (
@@ -208,7 +217,10 @@ def deduplicate_rules(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
 def load_active_rules() -> pd.DataFrame:
     """Allowed schedules that are not repealed."""
-    df = pd.read_csv(data_path('toronto_raw_parking_dump.csv'))
+    df = pd.read_csv(
+        data_path('toronto_raw_parking_dump.csv'),
+        usecols=['_id', 'scheduleName', 'ByLaw_Table', 'Latest_Action'],
+    )
     return df[
         (df['Latest_Action'] != 'Repealed')
         & df['scheduleName'].isin(ALLOWED_SCHEDULE_NAMES)

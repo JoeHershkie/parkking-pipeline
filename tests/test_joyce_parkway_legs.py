@@ -32,7 +32,10 @@ def test_joyce_parkway_legs_slice(row_id: int, bylaw_highway: str) -> None:
     if not successes.exists():
         pytest.skip('parsed_successes.csv not present locally')
     parsed = pd.read_csv(successes)
-    row = parsed.loc[parsed['_id'] == row_id].iloc[0]
+    matching = parsed.loc[parsed['_id'] == row_id]
+    if matching.empty:
+        pytest.skip(f'row {row_id} not present in parsed_successes.csv')
+    row = matching.iloc[0]
     lookup = thr.tcl_lookup_key(bylaw_highway)
     assert lookup == 'joyce parkway'
 

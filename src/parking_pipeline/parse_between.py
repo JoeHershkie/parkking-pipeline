@@ -727,17 +727,19 @@ def parse_between(text) -> dict | None:
 
 
 def _build_success_row(
-    raw: pd.Series,
+    raw_dict: dict,
+    row_id: object,
     parsed: dict,
+    highway: str,
     schedule_by_id: dict | None = None,
 ) -> dict:
-    row = raw.to_dict()
+    row = dict(raw_dict)
     row.update(parsed_dict_to_columns(parsed))
-    row.update(norm_columns_for_row(parsed, raw.get('Highway', '')))
+    row.update(norm_columns_for_row(parsed, highway))
     row['parse_valid'] = True
     row['parse_error'] = ''
     if schedule_by_id is not None:
-        sched = schedule_by_id.get(raw['_id'])
+        sched = schedule_by_id.get(row_id)
         if sched is not None:
             row.update(sched)
         else:
@@ -752,11 +754,18 @@ def _load_schedule_by_id() -> dict:
         return {}
     sched_df = pd.read_csv(path)
     by_id: dict = {}
-    for _, srow in sched_df.iterrows():
-        by_id[srow['_id']] = {
-            'schedule_json': srow['schedule_json'],
-            'schedule_status': srow['schedule_status'],
-            'max_minutes': srow.get('max_minutes'),
+    col_idx = {c: sched_df.columns.get_loc(c) for c in sched_df.columns}
+    id_idx = col_idx.get('_id')
+    json_idx = col_idx.get('schedule_json')
+    stat_idx = col_idx.get('schedule_status')
+    max_idx = col_idx.get('max_minutes')
+    if id_idx is None or json_idx is None or stat_idx is None:
+        return {}
+    for tup in sched_df.itertuples(index=False, name=None):
+        by_id[tup[id_idx]] = {
+            'schedule_json': tup[json_idx],
+            'schedule_status': tup[stat_idx],
+            'max_minutes': tup[max_idx] if max_idx is not None else None,
         }
     return by_id
 
@@ -769,21 +778,37 @@ def parse_rows(
     failure_counts: Counter = Counter()
     rows: list[dict] = []
 
-    for _, raw in df.iterrows():
-        between = raw.get('Between', '')
-        highway = raw.get('Highway', '')
-        row_id = raw['_id']
+    parsed_cache: dict[str, dict | None] = {}
+    validation_cache: dict[str, tuple[bool, str]] = {}
 
-        if pd.isna(between) or not str(between).strip():
+    col_names = df.columns.tolist()
+    col_idx = {c: i for i, c in enumerate(col_names)}
+    id_idx = col_idx.get('_id')
+    hi_idx = col_idx.get('Highway')
+    bt_idx = col_idx.get('Between')
+
+    for tup in df.itertuples(index=False, name=None):
+        row_id = tup[id_idx] if id_idx is not None else None
+        highway = str(tup[hi_idx]) if hi_idx is not None and not pd.isna(tup[hi_idx]) else ''
+        raw_bt = tup[bt_idx] if bt_idx is not None else None
+        between = str(raw_bt) if raw_bt is not None and not pd.isna(raw_bt) else ''
+
+        if not between.strip():
             record_failure(
                 row_id, 'parse', PARSE_EMPTY_BETWEEN, 'empty Between', highway, between,
             )
             failure_counts[PARSE_EMPTY_BETWEEN] += 1
             continue
 
-        between_input = preprocess_between(str(between).strip())
-        parsed = parse_between(between)
+        bt_str = between.strip()
+        if bt_str in parsed_cache:
+            parsed = parsed_cache[bt_str]
+        else:
+            parsed = parse_between(between)
+            parsed_cache[bt_str] = parsed
+
         if parsed is None:
+            between_input = preprocess_between(bt_str)
             record_failure(
                 row_id, 'parse', PARSE_NO_MATCH, 'no pattern matched', highway, between,
                 between_input,
@@ -791,15 +816,22 @@ def parse_rows(
             failure_counts[PARSE_NO_MATCH] += 1
             continue
 
-        ok, err = validate_parsed(parsed)
+        if bt_str in validation_cache:
+            ok, err = validation_cache[bt_str]
+        else:
+            ok, err = validate_parsed(parsed)
+            validation_cache[bt_str] = (ok, err)
+
         if not ok:
+            between_input = preprocess_between(bt_str)
             record_failure(
                 row_id, 'parse', PARSE_INVALID, err, highway, between, between_input,
             )
             failure_counts[PARSE_INVALID] += 1
             continue
 
-        rows.append(_build_success_row(raw, parsed, schedule_by_id))
+        raw_dict = dict(zip(col_names, tup, strict=True))
+        rows.append(_build_success_row(raw_dict, row_id, parsed, highway, schedule_by_id))
 
     extra_cols = list(SCHEDULE_EXPORT_COLUMNS) if schedule_by_id is not None else []
     if not rows:

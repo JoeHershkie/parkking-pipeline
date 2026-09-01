@@ -42,6 +42,8 @@ data/highway_resolution_audit.json
 data/normalizer_rule_evaluation.json
 data/phase_a_baseline_summary.json
 data/*.pdf
+data/baseline_run/
+data/branches/
 data/.geo_cache/
 
 # --- Pipeline external data (downloaded locally) ---

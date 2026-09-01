@@ -122,17 +122,20 @@ def _build_centreline_meta(st_gdf: gpd.GeoDataFrame) -> dict[int, CentrelineMeta
     out: dict[int, CentrelineMeta] = {}
     if 'CENTRELINE_ID' not in st_gdf.columns:
         return out
-    has_fc = 'FEATURE_CODE_DESC' in st_gdf.columns
-    has_pl = 'PARITY_L' in st_gdf.columns
-    has_pr = 'PARITY_R' in st_gdf.columns
-    for _, row in st_gdf.iterrows():
-        cid = row['CENTRELINE_ID']
-        if pd.isna(cid):
+    col_idx = {c: st_gdf.columns.get_loc(c) for c in st_gdf.columns}
+    cid_idx = col_idx['CENTRELINE_ID']
+    fc_idx = col_idx.get('FEATURE_CODE_DESC')
+    pl_idx = col_idx.get('PARITY_L')
+    pr_idx = col_idx.get('PARITY_R')
+
+    for tup in st_gdf.itertuples(index=False, name=None):
+        cid = tup[cid_idx]
+        if cid is None or pd.isna(cid):
             continue
         out[int(cid)] = CentrelineMeta(
-            feature_code_desc=_meta_str(row['FEATURE_CODE_DESC']) if has_fc else None,
-            parity_l=_meta_str(row['PARITY_L']) if has_pl else None,
-            parity_r=_meta_str(row['PARITY_R']) if has_pr else None,
+            feature_code_desc=_meta_str(tup[fc_idx]) if fc_idx is not None else None,
+            parity_l=_meta_str(tup[pl_idx]) if pl_idx is not None else None,
+            parity_r=_meta_str(tup[pr_idx]) if pr_idx is not None else None,
         )
     return out
 

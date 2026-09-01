@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
 import sys
 import threading
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 
-import geopandas as gpd
 import pandas as pd
+from shapely.geometry import mapping as geom_mapping
 
 from . import geo_indices
 from .curb_geometry import (
@@ -341,10 +342,15 @@ def _geo_batch_limit(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _geo_workers() -> int:
-    raw = os.environ.get('GEO_WORKERS', '').strip()
+    raw = os.environ.get('GEO_WORKERS', '').strip().lower()
     if not raw:
         return 0
-    return max(0, int(raw))
+    if raw in ('auto', 'all', '-1'):
+        return max(1, os.cpu_count() or 1)
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
 
 
 def _source_mtime(name: str) -> str | None:
@@ -482,6 +488,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     add_verbose_arg(parser)
     parser.add_argument(
+        '-w', '--workers',
+        type=str,
+        default=None,
+        help=(
+            'Number of worker processes for geometry slicing '
+            '(e.g. 4, auto; default: GEO_WORKERS env or 0 for sequential)'
+        ),
+    )
+    parser.add_argument(
         '--require-road-edges',
         action='store_true',
         help=(
@@ -491,6 +506,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     setup_logging(verbose=args.verbose)
+    if args.workers is not None:
+        os.environ['GEO_WORKERS'] = str(args.workers)
 
     main_start = time.perf_counter()
 
@@ -554,9 +571,14 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.perf_counter()
     progress = _SliceProgress(len(row_args))
     if workers > 1:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        pool_kwargs: dict = {}
+        try:
+            pool_kwargs['mp_context'] = multiprocessing.get_context('fork')
+        except (ValueError, AttributeError):
+            pass
+        with ProcessPoolExecutor(max_workers=workers, **pool_kwargs) as pool:
             for payload, fail_rec in pool.map(
-                _process_geo_row, row_args, chunksize=8,
+                _process_geo_row, row_args, chunksize=16,
             ):
                 _apply_row_outcome(payload, fail_rec)
                 progress.advance()
@@ -577,10 +599,20 @@ def main(argv: list[str] | None = None) -> int:
     export_sec = 0.0
     if results:
         t0 = time.perf_counter()
-        gdf = gpd.GeoDataFrame(results, geometry='geometry')
-        gdf.set_crs(epsg=4326, inplace=True)
         out_path = data_path('final_parking_map.geojson')
-        geojson = json.loads(gdf.to_json())
+        features = [
+            {
+                'id': str(i),
+                'type': 'Feature',
+                'properties': {k: v for k, v in row.items() if k != 'geometry'},
+                'geometry': geom_mapping(row['geometry']),
+            }
+            for i, row in enumerate(results)
+        ]
+        geojson = {
+            'type': 'FeatureCollection',
+            'features': features,
+        }
         method_counts = Counter(
             str(row.get('curb_geometry_method') or '') for row in results
         )

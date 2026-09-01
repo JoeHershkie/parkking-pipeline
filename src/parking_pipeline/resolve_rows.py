@@ -43,18 +43,37 @@ def resolve_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
     failure_counts: Counter = Counter()
     rows: list[dict] = []
 
-    for _, raw in df.iterrows():
-        row_id = raw['_id']
-        highway = raw.get('Highway', '')
-        between = raw.get('Between', '')
+    resolve_cache: dict[tuple, dict] = {}
+    col_names = df.columns.tolist()
+    col_idx = {c: i for i, c in enumerate(col_names)}
+    id_idx = col_idx.get('_id')
+    hi_idx = col_idx.get('Highway')
+    bt_idx = col_idx.get('Between')
+    pv_idx = col_idx.get('parse_valid')
 
-        if 'parse_valid' in raw.index and not _parse_valid_flag(raw.get('parse_valid')):
+    for tup in df.itertuples(index=False, name=None):
+        if pv_idx is not None and not _parse_valid_flag(tup[pv_idx]):
             continue
 
+        row_id = tup[id_idx] if id_idx is not None else None
+        highway = tup[hi_idx] if hi_idx is not None and not pd.isna(tup[hi_idx]) else ''
+        between = tup[bt_idx] if bt_idx is not None and not pd.isna(tup[bt_idx]) else ''
+
+        raw = dict(zip(col_names, tup, strict=True))
         parsed = row_to_parsed(raw)
-        resolved_cols = resolve_columns_for_row(raw, parsed)
-        row = raw.to_dict()
-        row.update(resolved_cols)
+
+        cache_key = (
+            highway,
+            between,
+            tuple(sorted((k, v) for k, v in parsed.items() if k != '_id')),
+        )
+        cached = resolve_cache.get(cache_key)
+        if cached is None:
+            cached = resolve_columns_for_row(raw, parsed)
+            resolve_cache[cache_key] = cached
+
+        resolved_cols = dict(cached)
+        raw.update(resolved_cols)
 
         if not resolved_cols.get('resolve_valid'):
             record_failure(
@@ -67,7 +86,7 @@ def resolve_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
             )
             failure_counts[RESOLVE_STREET_NOT_FOUND] += 1
 
-        rows.append(row)
+        rows.append(raw)
 
     if not rows:
         out_cols = list(df.columns) + [c for c in RESOLVE_COLUMNS if c not in df.columns]
