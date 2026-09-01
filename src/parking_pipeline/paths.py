@@ -18,6 +18,10 @@ _SHARED_SOURCE_FILES = frozenset({
     "street_aliases.csv",
     "highway_aliases.csv",
     "curb_geometry_overrides.csv",
+    "toronto_raw_parking_dump.csv",
+    "former_municipality_boundaries.geojson",
+    "permit_parking_areas.geojson",
+    "fire_hydrants.geojson",
 })
 
 

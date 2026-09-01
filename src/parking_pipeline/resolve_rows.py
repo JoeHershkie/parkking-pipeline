@@ -9,7 +9,7 @@ from collections import Counter
 import pandas as pd
 
 from . import tcl_highway_resolve as thr
-from .failure_ledger import clear_stage, record_failure
+from .failure_ledger import clear_stage, record_failure, record_failures
 from .parse_format import (
     RESOLVE_COLUMNS,
     _parse_valid_flag,
@@ -42,6 +42,7 @@ def resolve_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
     """Add resolve columns to each row; record failures to the ledger."""
     failure_counts: Counter = Counter()
     rows: list[dict] = []
+    failures_to_record: list[dict] = []
 
     resolve_cache: dict[tuple, dict] = {}
     col_names = df.columns.tolist()
@@ -76,17 +77,21 @@ def resolve_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, Counter]:
         raw.update(resolved_cols)
 
         if not resolved_cols.get('resolve_valid'):
-            record_failure(
-                row_id,
-                'resolve',
-                RESOLVE_STREET_NOT_FOUND,
-                resolved_cols.get('resolve_error') or 'resolve failed',
-                highway,
-                between,
-            )
+            failures_to_record.append({
+                'row_id': row_id,
+                'stage': 'resolve',
+                'reason_code': RESOLVE_STREET_NOT_FOUND,
+                'detail': resolved_cols.get('resolve_error') or 'resolve failed',
+                'highway': highway,
+                'between': between,
+                'between_parsed_input': '',
+            })
             failure_counts[RESOLVE_STREET_NOT_FOUND] += 1
 
         rows.append(raw)
+
+    if failures_to_record:
+        record_failures(failures_to_record)
 
     if not rows:
         out_cols = list(df.columns) + [c for c in RESOLVE_COLUMNS if c not in df.columns]
