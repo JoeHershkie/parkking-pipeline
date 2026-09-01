@@ -9,7 +9,7 @@ from collections import Counter
 import pandas as pd
 
 from . import tcl_highway_resolve as thr
-from .failure_ledger import clear_stage, record_failure, record_failures
+from .failure_ledger import clear_stage, record_failures
 from .parse_format import (
     RESOLVE_COLUMNS,
     _parse_valid_flag,
