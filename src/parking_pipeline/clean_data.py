@@ -210,17 +210,30 @@ def _norm_cell(val) -> str:
     return '' if _is_blank(val) else str(val).strip().casefold()
 
 
-def _clean_row(row_id: object, schedule_name: object, fields: dict) -> dict:
+def _clean_row(row_or_id: object, schedule_name_or_fields: object, fields: dict | None = None) -> dict:
+    if fields is not None:
+        row_id = row_or_id
+        schedule_name = schedule_name_or_fields
+        f = fields
+    elif hasattr(row_or_id, '__getitem__'):
+        row_id = row_or_id['_id']
+        schedule_name = row_or_id['scheduleName']
+        f = schedule_name_or_fields if isinstance(schedule_name_or_fields, dict) else {}
+    else:
+        row_id = row_or_id
+        schedule_name = str(schedule_name_or_fields)
+        f = {}
+
     cat = schedule_category(str(schedule_name))
     return {
         '_id': row_id,
         'scheduleName': schedule_name,
         'schedule_category': cat,
-        'Highway': fields.get('Highway'),
-        'Side': extract_side(fields, cat),
-        'Between': extract_between(fields),
-        'Prohibited Times and/or Days': prohibited_times(fields, cat),
-        'Maximum Period Permitted': extract_max_period(fields),
+        'Highway': f.get('Highway'),
+        'Side': extract_side(f, cat),
+        'Between': extract_between(f),
+        'Prohibited Times and/or Days': prohibited_times(f, cat),
+        'Maximum Period Permitted': extract_max_period(f),
     }
 
 
