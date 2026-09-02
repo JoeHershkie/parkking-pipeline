@@ -446,14 +446,12 @@ def _geo_batch_limit(df: pd.DataFrame) -> pd.DataFrame:
 
 def _geo_workers() -> int:
     raw = os.environ.get('GEO_WORKERS', '').strip().lower()
-    if not raw:
-        return 0
-    if raw in ('auto', 'all', '-1'):
+    if not raw or raw in ('auto', 'all', '-1'):
         return max(1, os.cpu_count() or 1)
     try:
         return max(0, int(raw))
     except ValueError:
-        return 0
+        return max(1, os.cpu_count() or 1)
 
 
 def _source_mtime(name: str) -> str | None:

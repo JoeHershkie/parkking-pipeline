@@ -129,11 +129,12 @@ def strip_street_suffix(name: str) -> str:
     return re.sub(r'\s+', ' ', s).strip()
 
 
-def _name_tokens(name: str) -> tuple[list[str], str | None, str | None]:
+@functools.lru_cache(maxsize=32768)
+def _name_tokens(name: str) -> tuple[tuple[str, ...], str | None, str | None]:
     """Split into base word tokens, terminal type token, terminal direction."""
     raw = tcl_highway_key(strip_highway_qualifiers(name))
     if not raw:
-        return [], None, None
+        return (), None, None
     parts = raw.split()
     direction = None
     if parts and parts[-1] in _CARDINAL_WORDS:
@@ -141,7 +142,7 @@ def _name_tokens(name: str) -> tuple[list[str], str | None, str | None]:
     street_type = None
     if parts and parts[-1] in _STREET_TYPES:
         street_type = parts.pop()
-    return parts, street_type, direction
+    return tuple(parts), street_type, direction
 
 
 def _edit_distance_le1(a: str, b: str) -> bool:
