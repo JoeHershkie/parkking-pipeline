@@ -28,6 +28,8 @@ data/failure_ledger.csv
 data/failure_triage.csv
 data/failure_triage_summary.json
 data/final_parking_map.geojson
+data/parking_map.sqlite
+data/parking_data_manifest.json
 data/geometry_failure_analysis.csv
 data/intersection_failure_analysis.csv
 data/intersection_failure_summary.json

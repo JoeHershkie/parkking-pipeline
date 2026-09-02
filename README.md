@@ -16,7 +16,7 @@ This pipeline:
 1. **Parses** freeform legal text for temporal rules (days, times, durations, public holiday exceptions) and geographic spans (between/from/to, offsets, compass directions).
 2. **Resolves** street names against the [Toronto Centreline (TCL)](https://open.toronto.ca/dataset/toronto-centreline-tcl/) and intersection nodes using graph search and normalization heuristics.
 3. **Projects** legal spans onto physical curbs using Toronto Road Edge polygons (with calibrated parallel offsets as fallback).
-4. **Exports** validated, schema-compliant `final_parking_map.geojson` and metadata manifests.
+4. **Exports** pre-indexed, release-ready `parking_map.sqlite` (with SQLite R-Tree spatial index & `parking_data_manifest.json`) and optional `final_parking_map.geojson`.
 
 For a technical deep-dive on schemas, failure codes, and geometry algorithms, see [docs/README.md](docs/README.md).
 
@@ -69,7 +69,8 @@ parking-clean               # Fetch/refresh toronto_raw_parking_dump.csv from Op
 parking-parse-schedule      # Parse temporal bylaws into structured schedules
 parking-parse-between       # Extract geographic boundaries from legal descriptions
 parking-resolve             # Resolve spans against the Toronto Centreline graph
-parking-geo                 # Place spans on physical curb geometries (or: parking-geo --require-road-edges)
+parking-geo                 # Place spans on physical curbs & export parking_map.sqlite (options: --require-road-edges, --geojson)
+parking-export-sqlite       # Standalone CLI to convert GeoJSON to indexed parking_map.sqlite
 ```
 
 Use `-v` / `--verbose` or set `PARKING_VERBOSE=1` for detailed debug logging.

@@ -55,6 +55,8 @@ def test_data_path_resolves_branch_target(monkeypatch, tmp_path):
     monkeypatch.setenv("PARKING_GIT_BRANCH", "test-branch")
     b_dir = branch_data_dir()
     assert data_path("final_parking_map.geojson") == b_dir / "final_parking_map.geojson"
+    assert data_path("parking_map.sqlite") == b_dir / "parking_map.sqlite"
+    assert data_path("parking_data_manifest.json") == b_dir / "parking_data_manifest.json"
 
 
 def test_data_path_shared_source_fallback(monkeypatch):

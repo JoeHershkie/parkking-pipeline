@@ -135,7 +135,9 @@ Full local run against Toronto open-data exports (see [Data sources](#data-sourc
 | `data/topographic_road_edges.manifest.json` | **Source sidecar** | Provenance for the GeoPackage (gitignored with it) |
 | `data/tcl_street_names.csv` | Generated | Unique TCL legal names for highway resolve |
 | `data/curb_geometry_overrides.csv` | **Curated** | Rare per-row curb overrides keyed by `_id` |
-| `data/final_parking_map.geojson` | Generated | Map-ready line features (curb geometry + provenance) |
+| `data/parking_map.sqlite` | **Default Release Artifact** | Pre-indexed SQLite database with R-Tree spatial index & WKB geometry |
+| `data/parking_data_manifest.json` | **Release Manifest** | SHA-256 fingerprint, feature counts, bounding box, metadata |
+| `data/final_parking_map.geojson` | Optional Export (`--geojson`) | Map-ready line features (curb geometry + provenance) |
 | `data/curb_geometry_qa.csv` | Generated | Per-feature curb method / confidence / warnings |
 | `data/curb_geometry_qa_summary.json` | Generated | Compact rollups (methods, warnings, offset stats) |
 | `data/failure_ledger.csv` | Generated | Row-level failures from all stages |

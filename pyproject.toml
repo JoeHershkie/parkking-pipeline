@@ -33,6 +33,7 @@ parking-parse-schedule = "parking_pipeline.parse_schedule:main"
 parking-parse-between = "parking_pipeline.parse_between:main"
 parking-resolve = "parking_pipeline.resolve_rows:main"
 parking-geo = "parking_pipeline.geometry_engine:main"
+parking-export-sqlite = "parking_pipeline.export_sqlite:main"
 parking-run = "parking_pipeline.fullrun:main"
 
 [tool.setuptools.packages.find]
