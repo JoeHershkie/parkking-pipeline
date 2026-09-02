@@ -87,8 +87,8 @@ _DAY_NAME_RE = r'(?:Monday|Mon|Tuesday|Tues|Tue|Wednesday|Wed|Thursday|Thurs|Thu
 
 # Date range with explicit year (e.g. from June 6, 2022 to June 12, 2022)
 _DATE_RANGE_YEAR_RE = re.compile(
-    rf',?\s*(?:from\s+(?:and\s+including\s+)?)?(?:{_DAY_NAME_RE}\s*,?\s+)?({_MONTH_NAME_RE}),?\s+(\d{{1,2}}),?\s+(\d{{4}}),?\s+'
-    rf'to\s+(?:and\s+including\s+)?(?:{_DAY_NAME_RE}\s*,?\s+)?({_MONTH_NAME_RE}),?\s+(\d{{1,2}}),?\s+(\d{{4}}),?\s*(?:inclusive)?\.?\s*$',
+    rf',?\s*(?:from\s+(?:and\s+)?(?:including\s+)?)?(?:{_DAY_NAME_RE}\s*,?\s+)?({_MONTH_NAME_RE}),?\s+(\d{{1,2}}),?\s+(\d{{4}}),?\s+'
+    rf'to\s+(?:and\s+)?(?:including\s+)?(?:{_DAY_NAME_RE}\s*,?\s+)?({_MONTH_NAME_RE}),?\s+(\d{{1,2}}),?\s+(\d{{4}}),?\s*(?:inclusive)?\.?\s*$',
     re.IGNORECASE,
 )
 
@@ -99,8 +99,13 @@ _SINGLE_DATE_YEAR_RE = re.compile(
 
 # Calendar tails (stripped from end of clause, may repeat)
 _SEASONAL_YEAR_SPAN_RE = re.compile(
-    r',?\s*(?:from\s+)?([A-Za-z]+)\.?\s+(\d{1,2})\s+of\s+one\s+year\s+to\s+'
-    r'([A-Za-z]+)\.?\s+(\d{1,2})\s+of\s+the\s+(?:next\s+)?(?:following\s+)?year,?\s*(?:inclusive)?\.?\s*$',
+    r',?\s*(?:from\s+)?([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+of\s+(?:one\s+year\s+to|the\s+same\s+year\s+to)\s+'
+    r'([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(?:of\s+)?(?:the\s+)?(?:next\s+)?(?:following\s+)?year,?\s*(?:inclusive)?\.?\s*$',
+    re.IGNORECASE,
+)
+_SEASONAL_MONTH_ONLY_YEAR_SPAN_RE = re.compile(
+    r',?\s*(?:from\s+)?([A-Za-z]+)\.?\s+of\s+one\s+year\s+to\s+'
+    r'([A-Za-z]+)\.?\s+of\s+(?:the\s+)?(?:next\s+)?(?:following\s+)?year,?\s*(?:inclusive)?\.?\s*$',
     re.IGNORECASE,
 )
 _SEASONAL_NO_INCLUSIVE_RE = re.compile(
@@ -151,11 +156,11 @@ _DOM_LEADING_ORD_ORD_RE = re.compile(
     re.IGNORECASE,
 )
 _DOM_LEADING_FIRST_RE = re.compile(
-    r'^first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month',
+    r'^(?:from the |the |from )?first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month',
     re.IGNORECASE,
 )
 _DOM_FIRST_LAST_WORD_RE = re.compile(
-    r',?\s*(?:from the )?first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
+    r',?\s*(?:from the |the |from )?first day to the (\d{1,2})(?:st|nd|rd|th)? day of each month\.?\s*$',
     re.IGNORECASE,
 )
 _DOM_ORD_TO_ORD_RE = re.compile(
@@ -163,7 +168,7 @@ _DOM_ORD_TO_ORD_RE = re.compile(
     re.IGNORECASE,
 )
 _DOM_ORD_TO_LAST_RE = re.compile(
-    r',?\s*(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:day\s+)?to\s+(?:the\s+)?(?:last\s+day|end)\s+of\s+(?:each\s+)?month\.?\s*$',
+    r',?\s*(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:day\s+)?(?:of\s+each\s+month\s+)?to\s+(?:the\s+)?(?:last\s+day|end)\s+of\s+(?:each\s+)?month\.?\s*$',
     re.IGNORECASE,
 )
 _MONTH_LIST_RE = re.compile(
@@ -183,6 +188,52 @@ _ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 
 # (pattern, days, extra_flags) — matched from end of clause segment
 _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] = (
+    # Explicit compound exceptions first
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*(?:to|-)\s*(?:Sat|Saturday)\.?,?\s*except\s+(?:Sun\.?\s+and\s+)?public\s+holidays\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 4, 5, 6],
+        {'exceptPublicHolidays': True},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*(?:to|-)\s*(?:Sat|Saturday)\.?,?\s*except\s+(?:Sun\.?|Sunday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 4, 5, 6],
+        {},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*(?:to|-)\s*(?:Fri|Friday)\.?,?\s*except\s+each\s+(?:Thu|Thur|Thurs|Thursday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 5],
+        {},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*(?:to|-)\s*(?:Fri|Friday)\.?,?\s*except\s+(?:Thu|Thur|Thurs|Thursday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 5],
+        {},
+    ),
+    (
+        re.compile(r',?\s*except\s+each\s+(?:Thu|Thur|Thurs|Thursday)\.?\s*$', re.IGNORECASE),
+        [0, 1, 2, 3, 5, 6],
+        {},
+    ),
+    (
+        re.compile(r',?\s*except\s+(?:Thu|Thur|Thurs|Thursday)\.?,?\s+(?:Sat|Saturday)\.?\s+and\s+(?:Sun|Sunday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 5],
+        {},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*,\s*(?:Tue|Tues|Tuesday)\.?\s*,\s*(?:Thu|Thur|Thurs|Thursday)\.?\s*,?\s*(?:and\s+)?(?:Fri|Friday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 4, 5],
+        {},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s*,\s*(?:Tue|Tues|Tuesday)\.?\s*,\s*(?:Wed|Wednesday)\.?\s+and\s+(?:Fri|Friday)\.?\s*$', re.IGNORECASE),
+        [1, 2, 3, 5],
+        {},
+    ),
+    (
+        re.compile(r',?\s*(?:Mon|Monday)\.?\s+and\s+(?:Tue|Tues|Tuesday)\.?\s*(?:Only)?\.?\s*$', re.IGNORECASE),
+        [1, 2],
+        {},
+    ),
     # Explicit except Sunday & public holidays
     (
         re.compile(r',?\s*except\s+(?:Sun\.?|Sunday)\s+and\s+public\s+holidays\.?\s*$', re.IGNORECASE),
@@ -203,12 +254,6 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
     (
         re.compile(r',?\s*except\s+(?:Sat\.?,?\s+(?:and\s+)?Sun\.?|Saturday\s*,?\s+and\s+Sunday)\.?\s*$', re.IGNORECASE),
         [1, 2, 3, 4, 5],
-        {},
-    ),
-    # Mon to Fri except each Thurs.
-    (
-        re.compile(r',?\s*(?:Mon|Monday)\.?\s*(?:to|-)\s*(?:Fri|Friday)\.?,?\s*except\s+each\s+(?:Thu|Thur|Thurs|Thursday)\.?\s*$', re.IGNORECASE),
-        [1, 2, 3, 5],
         {},
     ),
     # Mon to Fri with variations
@@ -268,10 +313,16 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
         [5, 6],
         {},
     ),
+    # Sat to Mon
+    (
+        re.compile(r',?\s*(?:Sat|Saturday)\.?\s*(?:to|-)\s*(?:Mon|Monday)\.?,?\s*(?:inclusive)?\.?\s*$', re.IGNORECASE),
+        [6, 0, 1],
+        {},
+    ),
     # Sat to Sun / Sat and Sun
     (
         re.compile(
-            r',?\s*(?:on\s+)?(?:Sat|Saturday)\.?,?\s+(?:and|to|-)\s+(?:Sun|Sunday)\.?(?:\s+and\s+public\s+holidays)?\.?\s*$',
+            r',?\s*(?:on\s+)?(?:Sat|Saturday)\.?,?\s+(?:and|to|-)\s+(?:Sun|Sunday)\.?(?:\s*,?\s*and\s+public\s+holidays|\s*,?\s*including\s+public\s+holidays)?\.?\s*$',
             re.IGNORECASE,
         ),
         [0, 6],
@@ -279,7 +330,7 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
     ),
     (
         re.compile(
-            r',?\s*(?:on\s+)?(?:Sat|Saturday)\.?,?\s+(?:Sun|Sunday)\.?(?:\s+and\s+public\s+holidays)?\.?\s*$',
+            r',?\s*(?:on\s+)?(?:Sat|Saturday)\.?,?\s+(?:Sun|Sunday)\.?(?:\s*,?\s*and\s+public\s+holidays|\s*,?\s*including\s+public\s+holidays)?\.?\s*$',
             re.IGNORECASE,
         ),
         [0, 6],
@@ -308,12 +359,6 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
         _ALL_DAYS,
         {},
     ),
-    # Mon, Tues, Wed and Fri
-    (
-        re.compile(r',?\s*(?:Mon|Monday)\.?\s*,\s*(?:Tue|Tues|Tuesday)\.?\s*,\s*(?:Wed|Wednesday)\.?\s+and\s+(?:Fri|Friday)\.?\s*$', re.IGNORECASE),
-        [1, 2, 3, 5],
-        {},
-    ),
     # Single days
     (
         re.compile(r',?\s*(?:on\s+|each\s+)?(?:Sun|Sunday)\.?\s+and\s+public\s+holidays\.?\s*$', re.IGNORECASE),
@@ -336,7 +381,7 @@ _DAY_TAIL_RULES: tuple[tuple[re.Pattern[str], list[int], dict[str, bool]], ...] 
         {},
     ),
     (
-        re.compile(r',?\s*(?:on\s+|each\s+)?(?:Wed|Wednesday)\.?\s*$', re.IGNORECASE),
+        re.compile(r',?\s*(?:on\s+|each\s+)?(?:Wed|Wednesday)\.?\s*(?:only)?\.?\s*$', re.IGNORECASE),
         [3],
         {},
     ),
@@ -384,28 +429,176 @@ def _normalize_source(text: str) -> str:
     text = re.sub(r'\banytime\.', 'Anytime,', text, flags=re.IGNORECASE)
     text = re.sub(r'\banyitme\b', 'Anytime', text, flags=re.IGNORECASE)
     text = re.sub(r'\ball\s+times\b', 'Anytime', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b24\s+hours\b', 'Anytime', text, flags=re.IGNORECASE)
     text = re.sub(r'&', 'and', text)
     text = re.sub(r'\b(pubic|ppublic)\s+holidays\b', 'public holidays', text, flags=re.IGNORECASE)
     text = re.sub(r'\b(pubic|ppublic)\b', 'public', text, flags=re.IGNORECASE)
     text = re.sub(r'\bholidayse\b', 'holidays', text, flags=re.IGNORECASE)
     text = re.sub(r'\bexcluding\s+public\s+holidays\b', 'except public holidays', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bexpect\s+public\s+holidays\b', 'except public holidays', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bexcept\s+on\s+public\s+holidays\b', 'except public holidays', text, flags=re.IGNORECASE)
+    text = re.sub(r'\band\s+on\s+public\s+holidays\b', 'and public holidays', text, flags=re.IGNORECASE)
     text = re.sub(r'\bMon\.?\s*to\s*Fri[iy]\b', 'Mon. to Fri.', text, flags=re.IGNORECASE)
     text = re.sub(r'\bFri[iy]\b', 'Fri.', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bFri\.y\b', 'Fri.', text, flags=re.IGNORECASE)
     text = re.sub(r'\bMon\.to\b', 'Mon. to', text, flags=re.IGNORECASE)
     text = re.sub(r'\bMon\s*-\s*to\s*Fri\b', 'Mon. to Fri.', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bMon\.\s*-to\s*Fri\b', 'Mon. to Fri.', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bMon\.\s*to\.\s*(Fri|Sat)\b', r'Mon. to \1', text, flags=re.IGNORECASE)
     text = re.sub(r'\bo\s+Nov\b', 'to Nov', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(inclsuive|inclusing|inlusive)\b', 'inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bro\s+Mar\b', 'to Mar', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b31st\s+day\s+of\s+Mar,?\s*inclusive\b', '31st day of Mar., inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bNov\.\s*3,?\s*inclusive\b', 'Nov. 30, inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\binclusing\b', 'including', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(inclsuive|inlusive)\b', 'inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bfrom\s+including\b', 'from and including', text, flags=re.IGNORECASE)
     text = re.sub(r'\b(nest|next)\s+following\s+day\b', 'next following day', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bfollowng\s+year\b', 'following year', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bfollowing\s+next\s+day\b', 'next following day', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bthe\s+nest\s+following\s+day\b', 'the next following day', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bfollw?ing\s+year\b', 'following year', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bofo\s+ne\s+day\b', 'of one day', text, flags=re.IGNORECASE)
     text = re.sub(r'\b6:00\s*pm\.', '6:00 p.m.', text, flags=re.IGNORECASE)
+
+    # Fix meridiem spacing/typos
+    text = re.sub(r'(\d{1,2}):\s+(\d{2})', r'\1:\2', text)
+    text = re.sub(r'(\d{1,2}):(\d{2})a\s*\.m\.', r'\1:\2 a.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*am\.', r'\1:\2 a.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*pm\.', r'\1:\2 p.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\.p\.m\.', r'\1:\2 p.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*a\.m(?!\.)', r'\1:\2 a.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*pm\b', r'\1 p.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*am\b', r'\1 a.m.', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2})\.00\s*([ap]\.m\.)', r'\1:00 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'(?<!:)\b(\d{1,2})\s*([ap]\.m\.)', r'\1:00 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'\b10\.00\s*([ap]\.m\.)', r'10:00 \1', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):\s*(\d{2})\s*([ap]\.m\.)', r'\1:\2 \3', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*[ap]\.m\.)\s*,\s*to\s+(\d{1,2}:\d{2}\s*[ap]\.m\.)', r'\1 to \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b8:00\s+a\.m\s+to\b', '8:00 a.m. to', text, flags=re.IGNORECASE)
+
+    # Missing comma/separator between time ranges: '9:30 a.m. 11:30 a.m. to'
+    text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)\s+to\b)', r'\1, \2', text, flags=re.IGNORECASE)
+
+    # Missing 'to' between time stamps
+    text = re.sub(r'(?<!:)\b(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))', r'\1 to \2', text, flags=re.IGNORECASE)
+
+    # 12 midnight -> 12:00 midnight
+    text = re.sub(r'(?<!:)\b12\s+midnight\b', '12:00 midnight', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+to\s+midnight\b', r'\1 to 12:00 midnight', text, flags=re.IGNORECASE)
+
+    # Month abbr spacing (e.g. Apr.1 -> Apr. 1)
+    text = re.sub(rf'\b({_MONTH_NAME_RE})(\d{{1,2}})\b', r'\1 \2', text, flags=re.IGNORECASE)
+
+    # Clean up duration in time strings
+    text = re.sub(r',?\s*for\s+(?:a\s+)?maximum\s+period\s+of\s+\d+\s*(?:minutes|mins?\.?|hours?|hrs?\.?)', '', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*except\s+during\s+the\s+months\s+of\s+', ' except ', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*of\s+each\s+year\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bfirst\s+16th\s+day\b', '16th day', text, flags=re.IGNORECASE)
+    text = re.sub(r'\ball\s+other\s+times\b', 'Anytime', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(Jun\.|June),?\s*(Jul\.|July),?\s*and\s*(Aug\.|August)\s+excepted\b', 'except June, July and August', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bDec\.\s*to\s*the\s*31st\s+day\s+of\s+Mar,?\s*inclusive\b', 'Dec. 1 to Mar. 31, inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bfrom\s+the\s+1st\s+day\s+of\s+Dec\.\s+to\s+the\s+31st\s+day\s+of\s+Mar\.?,?\s*inclusive\b', 'from Dec. 1 to Mar. 31, inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b1st\s+day\s+of\s+Jul\.\s+to\s+the\s+last\s+day\s+of\s+Aug\.?,?\s*inclusive\b', 'July 1 to Aug. 31, inclusive', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b1st\s+day\s+of\s+Sept\.\s+to\s+the\s+last\s+day\s+of\s+June\s+the\s+following\s+year,?\s*inclusive\b', 'from Sept. 1 of one year to June 30 of the next following year, inclusive', text, flags=re.IGNORECASE)
+
+    # Alternate side specific variations
+    text = re.sub(
+        r'\b16th\s+day\s+of\s+each\s+month\s+to\s+7:00\s+p\.m\.\s+on\s+the\s+first\s+day\s+of\s+each\s+month\b',
+        'from the 16th day to the last day of each month',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'\b7:00\s+p\.m\.\s+of\s+the\s+16th\s+day\s+of\s+each\s+month\s+to\s+7:00\s+p\.m\.\s+of\s+the\s+first\s+day\s+of\s+each\s+month\b',
+        'from the 16th day to the last day of each month',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'\b(?:\d{1,2}:\d{2}\s*[ap]\.m\.\s+)?on\s+the\s+16th\s+day\s+of\s+each\s+month\s+to\s+\d{1,2}:\d{2}\s*[ap]\.m\.\s+on\s+the\s+first\s+day\s+of\s+(?:the\s+next\s+following\s+|the\s+next\s+|each\s+)?month\b',
+        'from the 16th day to the last day of each month',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'\b(?:\d{1,2}:\d{2}\s*[ap]\.m\.\s+)?on\s+the\s+first\s+day\s+of\s+each\s+month\s+to\s+\d{1,2}:\d{2}\s*[ap]\.m\.\s+on\s+the\s+16th\s+day\s+of\s+each\s+month\b',
+        'from the 1st day to the 15th day of each month',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r'\bfrom\s+the\s+1st\s+day\s+each\s+to\b', 'from the 1st day to', text, flags=re.IGNORECASE)
+
+    # Inverted exceptions
+    text = re.sub(
+        r'Anytime,\s*except\s+between\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))',
+        r'Anytime, except from \1 to \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'\bexcept\s+from\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+to\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+from\s+',
+        r'except from \1 to \2 and ',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+from\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+to\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))',
+        r'\1 and \2 to \3',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Daily except sat
+    text = re.sub(
+        r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)\s+to\s+\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+daily,\s*except\s+(\d{1,2}(?::\d{2})?\s*(?:a\.m\.|p\.m\.)\s+to\s+\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)),\s*(Sat|Saturday)\.?',
+        r'\1, Sun. to Fri.; \2, \3.',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Specific missing "to": "7:45 a.m. to 9:00 a.m. and 3:00 p.m. and 4:00 p.m." -> "7:45 a.m. to 9:00 a.m. and 3:00 p.m. to 4:00 p.m."
+    text = re.sub(
+        r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)\s+and\s+\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))',
+        r'\1 to \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+Mon\.',
+        r'\1 to \2, Mon.',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'(?<!:)\b(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+and\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))(?!\s*(?:to|-|of\b))',
+        r'\1 to \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # "8:00 to 6:00 p.m." -> "8:00 a.m. to 6:00 p.m."
+    text = re.sub(r'\b([1-9]|1[0-1]):(\d{2})\s+to\s+(\d{1,2}:\d{2}\s*p\.m\.)', r'\1:\2 a.m. to \3', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*[ap]\.m\.)to\b', r'\1 to', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b5:00\s+to\s+7:00,\s*Mon\.\s*to\s*Fri\.', '5:00 p.m. to 7:00 p.m., Mon. to Fri.', text, flags=re.IGNORECASE)
+
+    # Standalone date or seasonal phrases at start
+    text = re.sub(r'\bAnytime,\s*from\s+7:00\s+p\.m\.\s+on\s+the\s+1st\s+day\s+of\s+Dec\.\s+of\s+one\s+year\s+to\s+7:00\s+p\.m\.\s+on\s+the\s+1st\s+day\s+of\s+Apr\.\s+the\s+next\s+following\s+year\b', 'Dec. 1 of one year to Mar. 31 of the next following year', text, flags=re.IGNORECASE)
+
+    # Missing punctuation between day tail and Anytime
+    text = re.sub(r'(\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?)\s+(Anytime\b)', r'\1; \2', text, flags=re.IGNORECASE)
+
+    text = re.sub(r'\band\s+except\s+(?:on\s+)?public\s+holidays\b', 'and public holidays', text, flags=re.IGNORECASE)
+    text = re.sub(r'(of\s+(?:the\s+)?(?:next\s+)?following\s+day)\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)', r'\1, \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+to\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)\s+of\s+the\s+next\s+following\s+day)', r'\1 of one day to \2', text, flags=re.IGNORECASE)
+
     text = re.sub(r'\.\.+', '.', text)
-    text = re.sub(r',?\s*(?:school\s+)?buses?\s+excepted\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*(?:school\s+)?bus(?:es)?\s+excepted\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r',?\s*(?:removed|repealed)\b.*$', '', text, flags=re.IGNORECASE)
     text = re.sub(r',?\s*except\s+by\s+permit.*$', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\bof\s+the\s+same\s+year,?\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.)),\s*(of\s+(?:the\s+)?(?:next\s+)?following\s+day)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+of\s+(?:the\s+)?next\s+day\b', r'\1 of the next following day', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+of\s+(?:the\s+)?following\s+next\s+day\b', r'\1 of the next following day', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}:\d{2}\s*[ap]\.m\.)\s*of\s+one\s+day\b', r'\1 of one day', text, flags=re.IGNORECASE)
     return re.sub(r'\s+', ' ', text).strip()
 
 
@@ -477,10 +670,12 @@ def _append_dom_range(cal: dict[str, Any], start: int, end: int | str) -> None:
 
 
 def _parse_month_list(text: str) -> list[int] | None:
-    parts = re.split(r'\s*,\s*|\s+and\s+', text.strip(), flags=re.IGNORECASE)
+    text = re.sub(r'^(?:during the months of|during the months|during)\s+', '', text.strip(), flags=re.IGNORECASE)
+    text = re.sub(r'\s+excepted\b', '', text.strip(), flags=re.IGNORECASE)
+    parts = re.split(r'\s*,\s*(?:and\s+)?|\s+and\s+', text.strip(), flags=re.IGNORECASE)
     months: list[int] = []
     for part in parts:
-        part = part.strip().strip(',')
+        part = part.strip().strip(',').strip('.')
         if not part:
             continue
         mo = _parse_month_abbr(part)
@@ -501,6 +696,13 @@ def _extract_calendar_leading(text: str) -> tuple[str, dict[str, Any] | None]:
     """Strip day-of-month phrases at the start (before time or Anytime)."""
     remainder = text.strip()
     cal: dict[str, Any] = {}
+
+    m_single = re.match(r'^(?:from the |the |on the )?(\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+each\s+month', remainder, re.IGNORECASE)
+    if m_single and not re.match(r'^(?:from the |the |on the )?\d+(?:st|nd|rd|th)?\s+day\s+(?:of each month\s+)?to\b', remainder, re.IGNORECASE):
+        d = int(m_single.group(1))
+        _append_dom_range(cal, d, d)
+        remainder = remainder[m_single.end():].strip().lstrip(',').strip()
+
     m = re.match(
         r'^(?:from the )?(\d{1,2})(?:st|nd|rd|th)? day (?:of each month )?to the '
         r'last day of each month',
@@ -586,11 +788,11 @@ def _extract_calendar_tail(text: str) -> tuple[str, dict[str, Any] | None, dict[
             continue
 
         # Trailing except months (e.g. except July, August and public holidays)
-        m = re.search(rf',?\s*except\s+((?:{_MONTH_NAME_RE}(?:\s*,\s*|\s+))+(?:and\s+)?{_MONTH_NAME_RE})(?:\s+and\s+public\s+holidays)?\.?\s*$', remainder, re.IGNORECASE)
+        m = re.search(rf',?\s*except\s+((?:{_MONTH_NAME_RE}(?:\s*,\s*|\s+))+(?:and\s+)?{_MONTH_NAME_RE})(?:\s+and\s+(?:except\s+on\s+)?public\s+holidays|\s+and\s+public\s+holidays)?\.?\s*$', remainder, re.IGNORECASE)
         if m:
             except_months = _parse_month_list(m.group(1))
             if except_months:
-                if 'and public holidays' in m.group(0).lower():
+                if 'public holidays' in m.group(0).lower():
                     flags['exceptPublicHolidays'] = True
                 active_months = [m_num for m_num in _ALL_MONTHS if m_num not in except_months]
                 cal['months'] = sorted(set(active_months))
@@ -626,6 +828,18 @@ def _extract_calendar_tail(text: str) -> tuple[str, dict[str, Any] | None, dict[
             em = _parse_month_abbr(m.group(3))
             if sm and em:
                 _append_month_range(cal, sm, int(m.group(2)), em, int(m.group(4)))
+                remainder = remainder[: m.start()].strip().rstrip(',').strip()
+                changed = True
+                continue
+
+        # Seasonal month-only year span (e.g. Sep. of one year to Jun. of the next following year)
+        m = _SEASONAL_MONTH_ONLY_YEAR_SPAN_RE.search(remainder)
+        if m:
+            sm = _parse_month_abbr(m.group(1))
+            em = _parse_month_abbr(m.group(2))
+            if sm and em:
+                sf_end_day = cal_mod.monthrange(2025, em)[1]
+                _append_month_range(cal, sm, 1, em, sf_end_day)
                 remainder = remainder[: m.start()].strip().rstrip(',').strip()
                 changed = True
                 continue
@@ -735,6 +949,15 @@ def _extract_calendar_tail(text: str) -> tuple[str, dict[str, Any] | None, dict[
             changed = True
             continue
 
+        # Single DOM e.g. "The 15th day of each month"
+        m = re.search(r',?\s*(?:the\s+|on the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+each\s+month\.?\s*$', remainder, re.IGNORECASE)
+        if m:
+            d = int(m.group(1))
+            _append_dom_range(cal, d, d)
+            remainder = remainder[: m.start()].strip().rstrip(',').strip()
+            changed = True
+            continue
+
         # During months of...
         m = re.search(rf',?\s*(?:during the months of|during the months|during)\s+((?:{_MONTH_NAME_RE}(?:\s*,\s*|\s+))+(?:and\s+)?{_MONTH_NAME_RE})\.?\s*$', remainder, re.IGNORECASE)
         if m:
@@ -746,9 +969,13 @@ def _extract_calendar_tail(text: str) -> tuple[str, dict[str, Any] | None, dict[
                 changed = True
                 continue
 
-        # Standalone list of months (e.g. May, Jul., Sep. and Nov.)
-        mlist = _parse_month_list(remainder)
+        # Standalone list of months (e.g. May, Jul., Sep. and Nov. or July and Aug. and public holidays)
+        m_ph = re.search(r'\s+and\s+public\s+holidays\.?\s*$', remainder, re.IGNORECASE)
+        rem_check = remainder[: m_ph.start()].strip() if m_ph else remainder
+        mlist = _parse_month_list(rem_check)
         if mlist:
+            if m_ph:
+                flags['exceptPublicHolidays'] = True
             cal.setdefault('months', []).extend(mlist)
             cal['months'] = sorted(set(cal['months']))
             remainder = ''
@@ -859,35 +1086,58 @@ _WEEKDAY_SINGLE_TAIL_RE = re.compile(
 
 def _extract_day_tail(text: str) -> tuple[str, list[int], dict[str, bool]]:
     """Strip trailing weekday phrase; return (remainder, days, flags)."""
-    m = _WEEKDAY_SINGLE_TAIL_RE.search(text)
-    if m:
-        day_name = m.group(1).lower()
-        day_num = _WEEKDAY_ABBR.get(day_name[:3]) or _WEEKDAY_ABBR.get(day_name)
-        if day_num is not None:
-            return text[: m.start()].strip(), [day_num], {}
+    remainder = text.strip()
+    days = list(_ALL_DAYS)
+    flags: dict[str, bool] = {}
+    changed = True
+    while changed and remainder:
+        changed = False
 
-    for pat, days, flag_updates in _DAY_TAIL_RULES:
-        m = pat.search(text)
+        for pat, rule_days, flag_updates in _DAY_TAIL_RULES:
+            m = pat.search(remainder)
+            if m:
+                days = list(rule_days)
+                flags.update(flag_updates)
+                remainder = remainder[: m.start()].strip().rstrip(',')
+                changed = True
+                break
+
+        if changed:
+            continue
+
+        m = _WEEKDAY_SINGLE_TAIL_RE.search(remainder)
         if m:
-            return text[: m.start()].strip(), days, dict(flag_updates)
+            day_name = m.group(1).lower()
+            day_num = _WEEKDAY_ABBR.get(day_name[:3]) or _WEEKDAY_ABBR.get(day_name)
+            if day_num is not None:
+                days = [day_num]
+                remainder = remainder[: m.start()].strip().rstrip(',')
+                changed = True
+                continue
 
-    # Check each weekday tail (e.g. , each Thurs.)
-    m_each = re.search(rf',?\s*(?:on\s+)?each\s+({_DAY_NAME_RE})\.?\s*$', text, re.IGNORECASE)
-    if m_each:
-        dname = m_each.group(1).lower().rstrip('.')
-        dnum = _WEEKDAY_ABBR.get(dname)
-        if dnum is not None:
-            return text[: m_each.start()].strip().rstrip(','), [dnum], {}
+        # Check each weekday tail (e.g. , each Thurs.)
+        m_each = re.search(rf',?\s*(?:on\s+)?each\s+({_DAY_NAME_RE})\.?\s*$', remainder, re.IGNORECASE)
+        if m_each:
+            dname = m_each.group(1).lower().rstrip('.')
+            dnum = _WEEKDAY_ABBR.get(dname)
+            if dnum is not None:
+                days = [dnum]
+                remainder = remainder[: m_each.start()].strip().rstrip(',')
+                changed = True
+                continue
 
-    # Check ordinal weekday tail (e.g. on the 1st Thu. and 3rd Thu. of each month)
-    m_ord = re.search(rf',?\s*(?:on\s+)?(?:the\s+)?(?:\d{{1,2}})(?:st|nd|rd|th)?\s+(?:{_DAY_NAME_RE}\s+)?and\s+(?:\d{{1,2}})(?:st|nd|rd|th)?\s+({_DAY_NAME_RE})\s+of\s+each\s+month\.?\s*$', text, re.IGNORECASE)
-    if m_ord:
-        dname = m_ord.group(1).lower().rstrip('.')
-        dnum = _WEEKDAY_ABBR.get(dname)
-        if dnum is not None:
-            return text[: m_ord.start()].strip().rstrip(','), [dnum], {}
+        # Check ordinal weekday tail (e.g. on the 1st Thu. and 3rd Thu. of each month)
+        m_ord = re.search(rf',?\s*(?:on\s+)?(?:the\s+)?(?:\d{{1,2}})(?:st|nd|rd|th)?\s+(?:{_DAY_NAME_RE}\s+)?and\s+(?:\d{{1,2}})(?:st|nd|rd|th)?\s+({_DAY_NAME_RE})\s+of\s+each\s+month\.?\s*$', remainder, re.IGNORECASE)
+        if m_ord:
+            dname = m_ord.group(1).lower().rstrip('.')
+            dnum = _WEEKDAY_ABBR.get(dname)
+            if dnum is not None:
+                days = [dnum]
+                remainder = remainder[: m_ord.start()].strip().rstrip(',')
+                changed = True
+                continue
 
-    return text.strip(), list(_ALL_DAYS), {}
+    return remainder.strip(), days, flags
 
 
 def _split_on_and_before_time(text: str) -> list[str]:
@@ -909,6 +1159,66 @@ def _split_on_and_before_time(text: str) -> list[str]:
     return [p for p in parts if p]
 
 
+_NAMED_DAY_SPAN_TIME_RE = re.compile(
+    r'^(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+([A-Za-z]+)\.?\s+to\s+'
+    r'(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))\s+(?:of\s+(?:the\s+)?(?:next\s+)?following\s+|of\s+following\s+)?([A-Za-z]+)\.?\s*$',
+    re.IGNORECASE,
+)
+
+
+def _parse_named_day_span(text: str) -> list[dict] | None:
+    m = _NAMED_DAY_SPAN_TIME_RE.match(text.strip())
+    if not m:
+        return None
+    sm_str, sday_str, em_str, eday_str = m.groups()
+    tm_pat = re.compile(r'(\d{1,2}):(\d{2})\s*([ap]\.m\.)', re.IGNORECASE)
+    m1 = tm_pat.match(sm_str)
+    m2 = tm_pat.match(em_str)
+    if not m1 or not m2:
+        return None
+    sm = time_to_minutes(m1.group(1), m1.group(2), m1.group(3))
+    em = time_to_minutes(m2.group(1), m2.group(2), m2.group(3))
+    sday = _WEEKDAY_ABBR.get(sday_str[:3].lower())
+    eday = _WEEKDAY_ABBR.get(eday_str[:3].lower())
+    if sday is None or eday is None:
+        return None
+
+    if (sday + 1) % 7 == eday:
+        return [{
+            'startMinute': sm,
+            'endMinute': em,
+            'crossesMidnight': True,
+            'days': [sday],
+        }]
+
+    windows: list[dict] = []
+    windows.append({
+        'startMinute': sm,
+        'endMinute': 1439,
+        'crossesMidnight': False,
+        'days': [sday],
+    })
+    cur = (sday + 1) % 7
+    full_days: list[int] = []
+    while cur != eday:
+        full_days.append(cur)
+        cur = (cur + 1) % 7
+    if full_days:
+        windows.append({
+            'startMinute': 0,
+            'endMinute': 1439,
+            'crossesMidnight': False,
+            'days': full_days,
+        })
+    windows.append({
+        'startMinute': 0,
+        'endMinute': em,
+        'crossesMidnight': False,
+        'days': [eday],
+    })
+    return windows
+
+
 def _parse_time_ranges(segment: str) -> tuple[list[dict], str | None]:
     """Extract windows from a segment that shares one day-tail (already stripped)."""
     windows: list[dict] = []
@@ -916,8 +1226,8 @@ def _parse_time_ranges(segment: str) -> tuple[list[dict], str | None]:
     err: str | None = None
 
     while remaining:
-        overnight = _OVERNIGHT_RANGE_RE.search(remaining)
-        if overnight and (not windows or overnight.start() == 0):
+        overnight = _OVERNIGHT_RANGE_RE.match(remaining)
+        if overnight:
             start_m = time_to_minutes(
                 overnight.group(1),
                 overnight.group(2),
@@ -938,8 +1248,8 @@ def _parse_time_ranges(segment: str) -> tuple[list[dict], str | None]:
                 remaining = remaining[4:].strip()
             continue
 
-        simple = _SIMPLE_RANGE_RE.search(remaining)
-        if simple and (not windows or simple.start() == 0):
+        simple = _SIMPLE_RANGE_RE.match(remaining)
+        if simple:
             start_m = time_to_minutes(simple.group(1), simple.group(2), simple.group(3))
             end_m = time_to_minutes(simple.group(4), simple.group(5), simple.group(6))
             crosses = end_m <= start_m
@@ -967,6 +1277,10 @@ def _parse_segment(segment: str) -> tuple[list[dict], dict[str, bool], str | Non
     for part in parts:
         part = part.strip().rstrip(',')
         if not part:
+            continue
+        day_span_windows = _parse_named_day_span(part)
+        if day_span_windows:
+            all_windows.extend(day_span_windows)
             continue
         is_anytime = bool(re.match(r'^anytime\b', part, re.IGNORECASE))
         body, days, seg_flags = _extract_day_tail(part)
@@ -1171,6 +1485,7 @@ def _parse_inverted(text: str, source: str) -> dict[str, Any]:
     if not m:
         return _empty_schedule(source, status='failed')
     except_body = text[m.end() :].strip().rstrip(',')
+    except_body = re.sub(r'^from\s+', '', except_body, flags=re.IGNORECASE).strip()
     windows, calendar, flags, err = _parse_clause(except_body)
     if err or not windows:
         return _empty_schedule(source, status='failed', unparsedClauses=[except_body] if err else [])
@@ -1189,16 +1504,24 @@ def _parse_inverted(text: str, source: str) -> dict[str, Any]:
 
 
 def _parse_month_list_schedule(text: str, source: str) -> dict[str, Any] | None:
-    months = _parse_month_list(text)
+    flags: dict[str, bool] = {}
+    m_ph = re.search(r'\s+and\s+public\s+holidays\.?\s*$', text, re.IGNORECASE)
+    cleaned = text[: m_ph.start()].strip() if m_ph else text
+    if m_ph:
+        flags['exceptPublicHolidays'] = True
+    months = _parse_month_list(cleaned)
     if months is None:
         return None
-    return {
+    out: dict[str, Any] = {
         'v': SCHEDULE_VERSION,
         'status': 'anytime',
         'source': source,
         'windows': [],
         'calendar': {'months': months},
     }
+    if flags:
+        out['flags'] = flags
+    return out
 
 
 def _split_clauses(text: str) -> list[str]:
@@ -1209,12 +1532,43 @@ def _split_clauses(text: str) -> list[str]:
         text,
         flags=re.IGNORECASE,
     )
+    # Split "Mon. to Fri. and Anytime Sat. and Sun."
+    text = re.sub(
+        r'(\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?(?:\s*(?:to|-)\s*(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?)?),?\s+and\s+(Anytime\b)',
+        r'\1; \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Split ", Anytime,"
+    text = re.sub(r',\s*Anytime,?\s*', '; Anytime, ', text, flags=re.IGNORECASE)
+    # Split time following a day tail: "Mon. to Fri., 8:00 a.m. to 6:00 p.m."
+    text = re.sub(
+        r'(\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\.?),\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))',
+        r'\1; \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Split "inclusive and 7:00 a.m."
+    text = re.sub(
+        r'(\binclusive)\s+and\s+(\d{1,2}:\d{2}\s*(?:a\.m\.|p\.m\.))',
+        r'\1; \2',
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Split "next following year and from the..."
+    text = re.sub(
+        r'\b(year|month|day)\s+and\s+from\b',
+        r'\1; from',
+        text,
+        flags=re.IGNORECASE,
+    )
+
     semi_parts = [p.strip() for p in text.split(';') if p.strip()]
     clauses: list[str] = []
     for sp in semi_parts:
         sp = re.sub(r'^(?:and\s+)', '', sp, flags=re.IGNORECASE).strip()
         subs = re.split(
-            r'(?:,\s*and\s+(?:from|anytime|all times)|;\s*and\s+(?:from|anytime|all times)|\s+and\s+(?:anytime|all times))\b',
+            r'(?:,\s*and\s+(?:from|anytime|all times)|;\s*and\s+(?:from|anytime|all times)|\s+and\s+(?:anytime|all times)|,\s*inclusive,?\s+and\s+from|\binclusive\s+and\s+from)\b',
             sp,
             flags=re.IGNORECASE,
         )

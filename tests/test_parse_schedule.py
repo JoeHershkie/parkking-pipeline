@@ -408,3 +408,156 @@ def test_winter_maintenance_dec_to_mar() -> None:
     assert overlaps_membership(s, {'dayOfWeek': 2, 'minuteOfDay': 180, 'month': 7, 'dayOfMonth': 15, 'year': 2026}) is False
 
 
+def test_discrete_weekday_lists_and_exceptions() -> None:
+    s1 = parse_schedule('8:00 a.m. to 6:00 p.m., Mon., Tue., Thu., Fri.')
+    assert s1['status'] == 'ok'
+    assert s1['windows'][0]['days'] == [1, 2, 4, 5]
+
+    s2 = parse_schedule('8:00 a.m. to 6:00 p.m., except Thu., Sat. and Sun.')
+    assert s2['status'] == 'ok'
+    assert s2['windows'][0]['days'] == [1, 2, 3, 5]
+
+    s3 = parse_schedule('8:00 a.m. to 6:00 p.m., Mon. and Tues.')
+    assert s3['status'] == 'ok'
+    assert s3['windows'][0]['days'] == [1, 2]
+
+    s4 = parse_schedule('8:00 a.m. to 6:00 p.m., Wed. only')
+    assert s4['status'] == 'ok'
+    assert s4['windows'][0]['days'] == [3]
+
+    s5 = parse_schedule('12:01 a.m. to 7:30 a.m., Sat. to Mon.')
+    assert s5['status'] == 'ok'
+    assert s5['windows'][0]['days'] == [6, 0, 1]
+
+
+def test_missing_time_separators_and_meridiems() -> None:
+    s1 = parse_schedule('8:00 a.m. 3:30 p.m., Mon. to Fri.')
+    assert s1['status'] == 'ok'
+    assert s1['windows'][0]['startMinute'] == 480
+    assert s1['windows'][0]['endMinute'] == 210 + 12 * 60
+
+    s2 = parse_schedule('8:00 to 6:00 p.m., Mon. to Fri.')
+    assert s2['status'] == 'ok'
+    assert s2['windows'][0]['startMinute'] == 480
+    assert s2['windows'][0]['endMinute'] == 360 + 12 * 60
+
+    s3 = parse_schedule('8:00 a.m. and 6:00 p.m., Mon. to Fri.')
+    assert s3['status'] == 'ok'
+    assert s3['windows'][0]['startMinute'] == 480
+    assert s3['windows'][0]['endMinute'] == 360 + 12 * 60
+
+    s4 = parse_schedule('12:01 a.m. and 6:00 a.m.')
+    assert s4['status'] == 'ok'
+    assert s4['windows'][0]['startMinute'] == 1
+    assert s4['windows'][0]['endMinute'] == 360
+
+
+def test_compound_seasonal_and_month_rotations() -> None:
+    raw = (
+        '10:00 a.m. to 6:00 p.m., Mon. to Sat. from Dec. 1 of one year to Mar. 31 of the next following year, inclusive, '
+        'and from the first day to the 15th day of each month from Apr. 1 to Nov. 30, inclusive'
+    )
+    s = parse_schedule(raw)
+    assert s['status'] == 'ok'
+    assert len(s['windows']) == 2
+    assert s['windows'][0]['calendar']['monthRanges'][0] == {
+        'startMonth': 12, 'startDay': 1, 'endMonth': 3, 'endDay': 31,
+    }
+    assert s['windows'][1]['calendar']['dayOfMonthRanges'][0] == {'start': 1, 'end': 15}
+    assert s['windows'][1]['calendar']['monthRanges'][0] == {
+        'startMonth': 4, 'startDay': 1, 'endMonth': 11, 'endDay': 30,
+    }
+
+
+def test_date_range_with_year_and_typo() -> None:
+    s = parse_schedule('Anytime from and inclusing Fri. Aug. 18, 2017 to and including Mon. Sept. 4, 2017')
+    assert s['status'] == 'ok'
+    assert s['windows'][0]['calendar']['monthRanges'][0] == {
+        'startMonth': 8, 'startDay': 18, 'endMonth': 9, 'endDay': 4,
+    }
+
+
+def test_single_day_of_month_schedule() -> None:
+    s = parse_schedule('The 15th day of each month, from Apr. 1 to Nov. 30, inclusive')
+    assert s['status'] == 'ok'
+    cal = s['windows'][0]['calendar']
+    assert cal['dayOfMonthRanges'][0] == {'start': 15, 'end': 15}
+    assert cal['monthRanges'][0] == {'startMonth': 4, 'startDay': 1, 'endMonth': 11, 'endDay': 30}
+
+
+def test_standalone_month_lists_and_holidays() -> None:
+    s1 = parse_schedule('May, July, Sept., and Nov.')
+    assert s1['status'] == 'anytime'
+    assert s1['calendar']['months'] == [5, 7, 9, 11]
+
+    s2 = parse_schedule('July and Aug. and public holidays')
+    assert s2['status'] == 'anytime'
+    assert s2['calendar']['months'] == [7, 8]
+    assert s2['flags']['exceptPublicHolidays'] is True
+
+
+def test_inverted_multi_window_exception() -> None:
+    s = parse_schedule('Anytime, except from 7:30 a.m. to 9:30 a.m. and from 3:30 p.m. to 6:30 p.m., Mon. to Fri.')
+    assert s['status'] == 'ok'
+    assert s.get('inverted') is True
+    assert len(s['windows']) == 2
+    assert s['windows'][0]['startMinute'] == 450
+    assert s['windows'][1]['startMinute'] == 930
+
+
+def test_duration_text_and_invalid_geographic_text() -> None:
+    s_dur = parse_schedule('8:00 a.m. to 6:00 p.m., Mon. to Fri., for a maximum period of 30 mins.')
+    assert s_dur['status'] == 'ok'
+
+    # Geographic descriptions in prohibited times column must fail rather than fallback to anytime
+    s_geo = parse_schedule('A point 126 metres south of Codsell Avenue and a point 96.5 metres further south')
+    assert s_geo['status'] == 'failed'
+
+
+def test_complex_multi_clause_bylaws() -> None:
+    # 1. Leslie Street 3 daytime windows + double except
+    s1 = parse_schedule('9:00 a.m. to 11:30 a.m., 1:00 p.m. to 3:00 p.m., 4:00 p.m. to 5:00 p.m., Mon. to Fri., except during the months of Jul. and Aug. and except on public holidays')
+    assert s1['status'] == 'ok'
+    assert len(s1['windows']) == 3
+    assert s1['windows'][0]['days'] == [1, 2, 3, 4, 5]
+    assert s1['windows'][0]['calendar']['months'] == [1, 2, 3, 4, 5, 6, 9, 10, 11, 12]
+    assert s1['flags']['exceptPublicHolidays'] is True
+
+    # 2. Eddystone Avenue named multi-day spans
+    s2 = parse_schedule('3:00 p.m. Fri. to 10:00 a.m. Sat.; 3:00 p.m. Sat. to 10:00 a.m. Fri.')
+    assert s2['status'] == 'ok'
+    assert len(s2['windows']) == 4
+
+    # 3. Weetwood Street winter and summer alternate side
+    s3 = parse_schedule('Dec. 1 of one year to Mar. 31 of the next following year and from the 16th day to the last day of each month, Apr. 1 to Nov. 30, inclusive')
+    assert s3['status'] == 'ok'
+    assert len(s3['windows']) == 2
+    assert s3['windows'][0]['calendar']['monthRanges'][0] == {'startMonth': 12, 'startDay': 1, 'endMonth': 3, 'endDay': 31}
+    assert s3['windows'][1]['calendar']['dayOfMonthRanges'][0] == {'start': 16, 'end': 'last'}
+
+    # 4. Hendrick Avenue weekday overnight + weekend continuous
+    s4 = parse_schedule('9:00 a.m. to 3:00 p.m. and from 4:00 p.m. to 8:00 a.m. of the next following day, Mon. to Fri., and from 4:00 p.m. Fri. to 8:00 a.m. of the following Mon.')
+    assert s4['status'] == 'ok'
+    assert len(s4['windows']) == 5
+
+    # 5. Fairfax Crescent school year overnight
+    s5 = parse_schedule('9:00 a.m. to 2:30 p.m. and 3:15 p.m. to 8:30 a.m. of the following next day, from September 1 of one year to June 30 of the next following year, inclusive')
+    assert s5['status'] == 'ok'
+    assert len(s5['windows']) == 2
+    assert s5['windows'][0]['calendar']['monthRanges'][0] == {'startMonth': 9, 'startDay': 1, 'endMonth': 6, 'endDay': 30}
+
+    # 6. Leslie Street 8am-9am, 11:30am-1pm, 3pm-4pm
+    s6 = parse_schedule('8:00 a.m. to 9:00 a.m., 11:30 a.m. to 1:00 p.m. and 3:00 p.m. to 4:00 p.m., Mon. to Fri. except during the months of July and Aug. and except on public holidays')
+    assert s6['status'] == 'ok'
+    assert len(s6['windows']) == 3
+
+    # 7. Poplar Plains Road overnight multi-window
+    s7 = parse_schedule('9:00 a.m. to 3:00 p.m. and 6:00 p.m. to 7:30 a.m. of the next following day Mon. to Fri.')
+    assert s7['status'] == 'ok'
+    assert len(s7['windows']) == 2
+    assert s7['windows'][0]['startMinute'] == 540 and s7['windows'][0]['endMinute'] == 900
+    assert s7['windows'][1]['startMinute'] == 1080 and s7['windows'][1]['endMinute'] == 450
+
+
+
+
