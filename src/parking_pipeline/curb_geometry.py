@@ -525,11 +525,19 @@ def _select_from_measured(
     margin = abs(left_score - right_score)
     if spec.wrapping:
         chosen, score = _pick_wrapping(measured, spec, left_score, right_score)
-        if chosen is None or score < 0.2:
-            warnings.append(SIDE_AMBIGUOUS)
-            return None, warnings, 0.0, margin
-        conf = 0.5 * measured.coverage + 0.5 * score
-        return chosen, warnings, conf, margin
+        if chosen is not None and score >= 0.2 and (len(spec.directions) <= 2 or score >= 0.99):
+            conf = 0.5 * measured.coverage + 0.5 * score
+            return chosen, warnings, conf, margin
+        # 3+ directions (or poor cover): union per-direction runs from one curb.
+        track, cover = _per_direction_track_geometry(measured, spec)
+        if track is not None:
+            conf = 0.5 * measured.coverage + 0.5 * cover
+            return track, warnings, conf, margin
+        if chosen is not None and score >= 0.2:
+            conf = 0.5 * measured.coverage + 0.5 * score
+            return chosen, warnings, conf, margin
+        warnings.append(SIDE_AMBIGUOUS)
+        return None, warnings, 0.0, margin
 
     if margin < MIN_DIRECTION_MARGIN:
         warnings.append(SIDE_AMBIGUOUS)
@@ -603,6 +611,10 @@ def _offset_fallback(
     left_score, right_score = _fallback_direction_scores(line_m, spec)
     margin = abs(left_score - right_score)
     if spec.wrapping:
+        if len(spec.directions) >= 3 and margin < MIN_DIRECTION_MARGIN:
+            # e.g. 'East, north and west': both offset curbs match some direction.
+            warnings.append(SIDE_AMBIGUOUS)
+            return None, warnings, 0.0, margin, sample_median, METHOD_CENTERLINE_UNRESOLVED
         if margin < MIN_DIRECTION_MARGIN:
             warnings.append(SIDE_AMBIGUOUS)
             return None, warnings, 0.0, margin, sample_median, METHOD_CENTERLINE_UNRESOLVED
@@ -1000,6 +1012,54 @@ def _pick_wrapping(
     if left_cover > right_cover or (left_cover == right_cover and left_score >= right_score):
         return _combine_lines(measured.left_parts), max(left_cover, left_score)
     return _combine_lines(measured.right_parts), max(right_cover, right_score)
+
+
+def _per_direction_hits(
+    hits: Sequence[_Hit],
+    wanted: frozenset[str] | set[str],
+) -> dict[str, list[_Hit]]:
+    """Group hits whose displacement compass is one of the wanted directions."""
+    grouped: dict[str, list[_Hit]] = {}
+    for hit in hits:
+        comp = displacement_compass(hit.dx, hit.dy)
+        if comp in wanted:
+            grouped.setdefault(comp, []).append(hit)
+    return grouped
+
+
+def _per_direction_track_geometry(
+    measured: _MeasuredTracks,
+    spec: SideSpec,
+    *,
+    min_directions: int = 2,
+) -> tuple[LineString | MultiLineString | None, float]:
+    """
+    Union per-direction curb segments when no single curb covers all wanted directions.
+
+    Returns the combined geometry and the fraction of wanted directions that
+    matched at least one measured run, or ``(None, 0.0)`` when fewer than
+    *min_directions* directions found runs on the same side.
+    """
+    wanted = set(spec.directions)
+    if not wanted:
+        return None, 0.0
+    best_side_hits: Sequence[_Hit] = ()
+    best_matched: set[str] = set()
+    for side_hits in (measured.left_hits, measured.right_hits):
+        grouped = _per_direction_hits(side_hits, wanted)
+        matched = set(grouped)
+        if len(matched) > len(best_matched):
+            best_side_hits = side_hits
+            best_matched = matched
+    if len(best_matched) < min_directions:
+        return None, 0.0
+    parts = _runs_to_lines(_stitch_runs(
+        [hit if displacement_compass(hit.dx, hit.dy) in best_matched else None
+         for hit in best_side_hits],
+        closed=False,
+    ))
+    geometry = _combine_lines(parts)
+    return geometry, len(best_matched) / len(wanted)
 
 
 def _direction_set_cover(hits: Sequence[_Hit], spec: SideSpec) -> float:

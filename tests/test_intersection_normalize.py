@@ -105,6 +105,21 @@ def test_st_possessive_aliases():
     assert apply_street_alias('Pengelly Court') == 'pengelly crt'
 
 
+def test_curated_grove_terrace_aliases():
+    clear_alias_cache()
+    assert apply_street_alias('Gloucester Grove') == 'gloucester grv'
+    assert apply_street_alias('Old Orchard Grove') == 'old orchard grv'
+    assert apply_street_alias('Old Mill Terrace') == 'old mill ter'
+
+
+def test_grove_normalizes_without_alias():
+    clear_alias_cache()
+    tokens = tcl_search_tokens('Gloucester Grove')
+    assert 'gloucester grv' in tokens
+    tokens = tcl_search_tokens('Old Orchard Grove')
+    assert 'old orchard grv' in tokens
+
+
 def test_tcl_search_tokens_spelled_direction():
     tokens = tcl_search_tokens('North Bonnington Avenue')
     assert 'north bonnington ave' in tokens
@@ -123,6 +138,29 @@ def test_strip_lookup_prefixes():
         strip_lookup_prefixes("the east curb line of St. Hilda's Avenue")
         == "St. Hilda's Avenue"
     )
+
+
+def test_strip_branch_side_leg_prefixes():
+    assert strip_lookup_prefixes('the east branch of Mount Pleasant Road') == 'Mount Pleasant Road'
+    assert strip_lookup_prefixes('the west side of Carysfort Road') == 'Carysfort Road'
+    assert strip_lookup_prefixes('the north leg of Yonge Street') == 'Yonge Street'
+    assert strip_lookup_prefixes('the southerly side of Queen Street West') == 'Queen Street West'
+
+
+def test_strip_terminus_street_prefix():
+    assert strip_lookup_prefixes('the southerly terminus street Kipling Avenue') == 'Kipling Avenue'
+    assert strip_lookup_prefixes('The Easterly Terminus Street Brown Line') == 'Brown Line'
+
+
+def test_strip_leading_the_before_street():
+    assert strip_lookup_prefixes('the Mount Pleasant Road') == 'Mount Pleasant Road'
+    assert strip_lookup_prefixes('The Bloor Street West') == 'Bloor Street West'
+
+
+def test_leading_the_kept_for_official_names():
+    assert strip_lookup_prefixes('The East Mall') == 'The East Mall'
+    assert strip_lookup_prefixes('The West Mall') == 'The West Mall'
+    assert strip_lookup_prefixes('the Queensway') == 'the Queensway'
 
 
 def test_tcl_search_tokens_st_clair_west_alias():

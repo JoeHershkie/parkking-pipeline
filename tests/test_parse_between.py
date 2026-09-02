@@ -439,3 +439,75 @@ def test_parse_between_parenthetical_dual_block_not_dual_anchor() -> None:
         'a point 45.7 metres east of Ellis Avenue (south intersection)'
     )
     assert parse_between(metric)['rule_type'] == 'dual_anchor'
+
+
+def test_at_a_point_rewritten_to_and_a_point() -> None:
+    between = 'Eastbound lane at a point 54 metres east of Freeland Street'
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == 'intersect_to_offset'
+    assert parsed['start_intersection'] == 'Eastbound lane'
+    assert parsed['offset_intersection'] == 'Freeland Street'
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+def test_at_a_point_chain_parses_block_then_offset() -> None:
+    between = (
+        'Cummer Avenue at a point 131.5 metres east thereof and Dunfield Avenue'
+    )
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == 'intersect_thereof_block'
+    assert parsed['start_intersection'] == 'Cummer Avenue'
+    assert parsed['end_intersection'] == 'Dunfield Avenue'
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+def test_lane_tail_at_a_point_of_anchor() -> None:
+    between = (
+        'Cummer Avenue at a point 131.5 metres east of Dunfield Avenue and '
+        'Greenfield Avenue'
+    )
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == 'intersect_to_offset'
+    assert parsed['start_intersection'] == 'Cummer Avenue'
+    assert parsed['offset_intersection'] == 'Dunfield Avenue and Greenfield Avenue'
+
+
+def test_juxtaposed_block_without_and() -> None:
+    parsed = parse_between('Alberta Avenue Oakwood Avenue')
+    assert parsed is not None
+    assert parsed['rule_type'] == 'block'
+    assert parsed['start_intersection'] == 'Alberta Avenue'
+    assert parsed['end_intersection'] == 'Oakwood Avenue'
+    ok, err = validate_parsed(parsed)
+    assert ok, err
+
+
+def test_juxtaposed_block_with_trailing_cardinal() -> None:
+    parsed = parse_between('Queen Street West King Street')
+    assert parsed is not None
+    assert parsed['rule_type'] == 'block'
+    assert parsed['start_intersection'] == 'Queen Street West'
+    assert parsed['end_intersection'] == 'King Street'
+
+
+def test_juxtaposed_block_does_not_steal_metric_text() -> None:
+    assert parse_between('A point 61 metres south and a point 61 metres north of Humberside Avenue') is not None
+
+
+def test_dual_offset_with_shared_trailing_anchor() -> None:
+    between = 'A point 61 metres south and a point 61 metres north of Humberside Avenue'
+    parsed = parse_between(between)
+    assert parsed is not None
+    assert parsed['rule_type'] == 'offset_span'
+    assert parsed['start_intersection'] == 'Humberside Avenue'
+    assert parsed['dist1'] == '61'
+    assert parsed['dir1'] == 'south'
+    assert parsed['dist2'] == '61'
+    assert parsed['dir2'] == 'north'
+    ok, err = validate_parsed(parsed)
+    assert ok, err

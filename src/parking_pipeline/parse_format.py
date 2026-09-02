@@ -71,6 +71,7 @@ _RULE_REQUIRED_STRINGS: dict[str, tuple[str, ...]] = {
     'perfect_offset': ('start_intersection', 'direction'),
     'intersect_to_offset': ('start_intersection', 'offset_intersection', 'direction'),
     'offset_to_intersect': ('start_intersection', 'end_intersection', 'direction'),
+    'intersect_thereof_block': ('start_intersection', 'end_intersection', 'direction'),
     'relative_extension': ('start_intersection', 'dir1'),
     'offset_span': ('start_intersection', 'dir1'),
     'dual_anchor': ('start_intersection', 'end_intersection', 'dir1', 'dir2'),
@@ -82,6 +83,7 @@ _RULE_REQUIRED_FLOATS: dict[str, tuple[str, ...]] = {
     'terminus_end_metric': ('distance',),
     'intersect_to_offset': ('distance',),
     'offset_to_intersect': ('distance',),
+    'intersect_thereof_block': ('distance',),
     'relative_extension': ('dist1', 'dist2'),
     'offset_span': ('dist1', 'dist2'),
     'dual_anchor': ('dist1', 'dist2'),
@@ -249,7 +251,8 @@ def validate_parsed(parsed: dict) -> tuple[bool, str]:
             return False, err
 
     if rule_type in (
-        'perfect_offset', 'intersect_extension', 'intersect_to_offset', 'offset_to_intersect',
+        'perfect_offset', 'intersect_extension', 'intersect_to_offset',
+        'offset_to_intersect', 'intersect_thereof_block',
     ):
         ok, err = _direction_ok(
             parsed.get('direction'), field='direction', allow_compass=True,

@@ -32,11 +32,13 @@ _ZERO_SPAN_DETAIL = 'anchor equals terminus; no mappable span'
 _COLLAPSE_TOL_M = 1e-3
 _RECOVER_BUFFER_M = 1.0
 _RECOVER_MIN_OVERLAP_M = 0.25
+_POINT_ZONE_SPAN_M = 5.0
 AMBIGUOUS_INTERSECTION = 'AMBIGUOUS_INTERSECTION'
 
 CENTRELINE_BLOCK_PATH = 'block_path'
 CENTRELINE_DISJOINT_BLOCK = 'disjoint_block'
 CENTRELINE_DISTANCE_MERGE = 'distance_merge'
+CENTRELINE_POINT_ZONE = 'point_zone'
 
 BLOCK_FAMILY_RULES = frozenset({
     'block',
@@ -68,6 +70,7 @@ SUPPORTED_RULE_TYPES = frozenset({
     'intersect_extension',
     'perfect_offset',
     'intersect_to_offset',
+    'intersect_thereof_block',
     'offset_to_intersect',
     'relative_extension',
     'offset_span',
@@ -331,11 +334,43 @@ def _offset_point_dist(
     return max(0.0, anchor_dist - sign * float(distance_m))
 
 
+def _point_zone_slice(
+    highway: str, line_m: LineString, anchor_dist: float,
+) -> SliceResult:
+    """
+    Short zone centered on an anchor when both endpoints collapse to one point.
+
+    Clamps to the line, preferring an inbound zone when the anchor sits at an
+    endpoint (mirrors the cul-de-sac clamp in ``_offset_point_dist``).
+    """
+    length = line_m.length
+    half = _POINT_ZONE_SPAN_M / 2.0
+    lo = max(0.0, anchor_dist - half)
+    hi = min(length, anchor_dist + half)
+    if hi - lo < _POINT_ZONE_SPAN_M:
+        # Anchor near an endpoint: shift the window inward to keep the full span.
+        if anchor_dist < half:
+            lo, hi = 0.0, min(_POINT_ZONE_SPAN_M, length)
+        else:
+            lo, hi = max(0.0, length - _POINT_ZONE_SPAN_M), length
+    if hi - lo < _COLLAPSE_TOL_M:
+        return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
+    sliced_m = substring(line_m, lo, hi)
+    if sliced_m.is_empty:
+        return SliceResult(None, EMPTY_GEOMETRY, 'empty geometry')
+    geom = transform(gi.project_to_gps, sliced_m)
+    return SliceResult(
+        geom,
+        centreline_ids=recover_centreline_ids(highway, geom),
+        construction_method=CENTRELINE_POINT_ZONE,
+    )
+
+
 def _slice_component_distances(
     highway: str, line_m: LineString, d0: float, d1: float,
 ) -> SliceResult:
     if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
-        return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
+        return _point_zone_slice(highway, line_m, d0)
     line_gps = transform(gi.project_to_gps, line_m)
     return slice_between_distances(line_gps, line_m, d0, d1, highway=highway)
 
@@ -663,13 +698,19 @@ def slice_between_distances(
     highway: str | None = None,
 ) -> SliceResult:
     if math.isclose(d0, d1, abs_tol=_COLLAPSE_TOL_M):
+        if highway:
+            return _point_zone_slice(highway, line_m, d0)
         return SliceResult(None, ZERO_SPAN, _ZERO_SPAN_DETAIL)
 
     lo, hi = (d0, d1) if d0 <= d1 else (d1, d0)
     sliced_m = substring(line_m, lo, hi)
     if sliced_m.is_empty:
+        if highway:
+            return _point_zone_slice(highway, line_m, (lo + hi) / 2.0)
         return SliceResult(None, EMPTY_GEOMETRY, 'empty geometry')
     if sliced_m.geom_type != 'LineString':
+        if highway:
+            return _point_zone_slice(highway, line_m, (lo + hi) / 2.0)
         return SliceResult(None, EMPTY_GEOMETRY, f'substring returned {sliced_m.geom_type}')
 
     geom = transform(gi.project_to_gps, sliced_m)
@@ -824,6 +865,26 @@ def slice_street(
                 highway, line_m, d0, d1,
                 cross_a=start_intersection,
                 cross_b=offset_intersection,
+            )
+            if recovered is not None:
+                return recovered
+            return _slice_component_distances(highway, line_m, d0, d1)
+
+        if rule_type == 'intersect_thereof_block':
+            start_intersection = parsed_data.get('start_intersection')
+            end_intersection = parsed_data.get('end_intersection')
+            line_m, d0 = _line_m_and_dist_for_cross(highway, start_intersection)
+            if line_m is None:
+                return SliceResult(
+                    None, INTERSECTION_NOT_FOUND, f"start_intersection={d0}",
+                )
+            distance = float(parsed_data.get('distance', 0))
+            direction = parsed_data.get('direction', '')
+            d1 = _offset_point_dist(line_m, d0, distance, direction)
+            recovered = _recover_collapsed_offset_span(
+                highway, line_m, d0, d1,
+                cross_a=start_intersection,
+                cross_b=end_intersection,
             )
             if recovered is not None:
                 return recovered

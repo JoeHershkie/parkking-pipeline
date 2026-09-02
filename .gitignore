@@ -55,3 +55,6 @@ data/street_aliases.csv
 data/highway_aliases.csv
 data/topographic_road_edges.gpkg
 data/topographic_road_edges.manifest.json
+
+# Exception: committed sample alias fixture for CI / fresh clones
+!data/samples/highway_aliases.csv

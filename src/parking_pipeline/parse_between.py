@@ -38,6 +38,9 @@ from .between_patterns import (
     METRES as _METRES,
 )
 from .between_patterns import (
+    STREET_HEAD as _STREET_HEAD,
+)
+from .between_patterns import (
     OPT_PAREN_IN_ANCHOR as _OPT_PAREN_IN_ANCHOR,
 )
 from .bylaw_text import preprocess_between
@@ -80,6 +83,7 @@ PARSE_INVALID = 'PARSE_INVALID'
 @dataclass(frozen=True)
 class _Patterns:
     offset_span: re.Pattern
+    dual_offset_of_street: re.Pattern
     opposite_and_metric: re.Pattern
     opposite_limit_block: re.Pattern
     opposite_and_block: re.Pattern
@@ -95,6 +99,8 @@ class _Patterns:
     parenthetical_to_terminus: re.Pattern
     parenthetical_end_block: re.Pattern
     parenthetical_dual_block: re.Pattern
+    thereof_and_block: re.Pattern
+    juxtaposed_block: re.Pattern
     block_to_terminus: re.Pattern
     terminus_end_block: re.Pattern
     terminus_end_opposite: re.Pattern
@@ -119,6 +125,12 @@ def _compile_patterns() -> _Patterns:
             rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) of '
             rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR}) '
             rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR})$',
+            re.IGNORECASE,
+        ),
+        dual_offset_of_street=re.compile(
+            rf'^A point {_APPROX}(?P<dist1>{_METRES}) metres (?P<dir1>{_COMPOUND_DIR}) '
+            rf'and a point {_APPROX}(?P<dist2>{_METRES}) metres (?P<dir2>{_COMPOUND_DIR}) of '
+            rf'(?P<start_intersection>.+?{_OPT_PAREN_IN_ANCHOR})$',
             re.IGNORECASE,
         ),
         opposite_and_metric=re.compile(
@@ -287,6 +299,16 @@ def _compile_patterns() -> _Patterns:
             rf'(?P<direction>{_COMPOUND_DIR}) thereof$',
             re.IGNORECASE,
         ),
+        thereof_and_block=re.compile(
+            rf'^(?P<start_intersection>.*?) and a point {_APPROX}(?P<distance>{_METRES}) metres '
+            rf'(?P<direction>{_COMPOUND_DIR}) thereof and (?P<end_intersection>.+?)$',
+            re.IGNORECASE,
+        ),
+        juxtaposed_block=re.compile(
+            rf'^(?P<start_intersection>{_STREET_HEAD})\s+'
+            rf'(?P<end_intersection>{_STREET_HEAD})$',
+            re.IGNORECASE,
+        ),
         entire_length=re.compile(r'^Entire length$', re.IGNORECASE),
     )
 
@@ -327,6 +349,12 @@ def _block_side_ok(side: str) -> bool:
 def _try_offset_span(text: str) -> dict | None:
     """Two metric offsets from the same cross-street anchor (not dist1 + dist2 further)."""
     m = _P.offset_span.match(text)
+    return _parsed(m, 'offset_span') if m else None
+
+
+def _try_dual_offset_of_street(text: str) -> dict | None:
+    """Offsets bracketing a trailing shared anchor: 'A point 61 m south and a point 61 m north of X'."""
+    m = _P.dual_offset_of_street.match(text)
     return _parsed(m, 'offset_span') if m else None
 
 
@@ -553,6 +581,20 @@ def _try_intersect_thereof(text: str) -> dict | None:
     return _parsed(m, 'intersect_extension')
 
 
+def _try_thereof_and_block(text: str) -> dict | None:
+    """``X and a point N metres DIR thereof and Y`` — offset from X, block to Y."""
+    m = _P.thereof_and_block.match(text)
+    if not m:
+        return None
+    start = (m.group('start_intersection') or '').strip()
+    end = (m.group('end_intersection') or '').strip()
+    if not (_block_side_ok(start) and _block_side_ok(end)):
+        return None
+    out = _parsed(m, 'intersect_thereof_block')
+    out['start_intersection'] = start
+    return out
+
+
 def _try_relative_extension(text: str) -> dict | None:
     m = _P.relative_extension.match(text)
     return _parsed(m, 'relative_extension') if m else None
@@ -662,6 +704,16 @@ def _try_block(text: str) -> dict | None:
     return _parsed(m, 'block')
 
 
+def _try_juxtaposed_block(text: str) -> dict | None:
+    """Two street names with the ``and`` omitted: 'Alberta Avenue Oakwood Avenue'."""
+    if 'point' in text.lower() or 'metres' in text.lower() or ' and ' in text.lower():
+        return None
+    m = _P.juxtaposed_block.match(text.strip())
+    if not m:
+        return None
+    return _parsed(m, 'block')
+
+
 def _try_intersect_extension(text: str) -> dict | None:
     m = _P.intersect_extension.match(text)
     if not m:
@@ -680,6 +732,7 @@ def _try_entire_length(text: str) -> dict | None:
 # Order matters — first match wins.
 _RULE_HANDLERS: tuple[ParseFn, ...] = (
     _try_offset_span,
+    _try_dual_offset_of_street,
     _try_metric_and_opposite_limit,
     _try_metric_and_metric_of,
     _try_opposite_and_metric,
@@ -698,6 +751,7 @@ _RULE_HANDLERS: tuple[ParseFn, ...] = (
     _try_parenthetical_end_block,
     _try_parenthetical_dual_block,
     _try_relative_extension,
+    _try_thereof_and_block,
     _try_street_and_bare_metric,
     _try_perfect_offset,
     _try_intersect_to_offset,
@@ -708,6 +762,7 @@ _RULE_HANDLERS: tuple[ParseFn, ...] = (
     _try_offset_to_intersect,
     _try_parenthetical_block,
     _try_block_lane_tail,
+    _try_juxtaposed_block,
     _try_block,
     _try_intersect_extension,
     _try_entire_length,

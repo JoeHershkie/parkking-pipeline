@@ -26,6 +26,9 @@ _REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r'\bgate\b', 'gt'),
     (r'\blawn\b', 'lwn'),
     (r'\bgardens\b', 'gdns'),
+    (r'\bgrove\b', 'grv'),
+    (r'\bheights\b', 'hts'),
+    (r'\bcrest\b', 'crct'),
     (r'\bwest\b', 'w'),
     (r'\beast\b', 'e'),
     (r'\bnorth\b', 'n'),
@@ -53,6 +56,25 @@ _CURB_LINE_PREFIX_RE = re.compile(
     r'^\s*the\s+(?:east|west|north|south)\s+curb\s+line\s+of\s+',
     re.I,
 )
+_BRANCH_SIDE_LEG_PREFIX_RE = re.compile(
+    r'^\s*the\s+(?:east|west|north|south)(?:ern|erly)?\s+'
+    r'(?:branch|side|leg)\s+of\s+',
+    re.I,
+)
+_TERMINUS_STREET_PREFIX_RE = re.compile(
+    r'^\s*the\s+(?:easterly|westerly|northerly|southerly)\s+terminus\s+street\b\s*',
+    re.I,
+)
+_LEADING_THE_RE = re.compile(r'^\s*the\s+(.+)$', re.I)
+_STREET_TYPE_TOKENS = frozenset({
+    'street', 'st', 'road', 'rd', 'avenue', 'ave', 'boulevard', 'blvd',
+    'drive', 'dr', 'crescent', 'cres', 'court', 'ct', 'place', 'pl',
+    'square', 'sq', 'terrace', 'terr', 'trail', 'trl', 'circle', 'crcl',
+    'parkway', 'pkwy', 'gate', 'gt', 'lawn', 'lwn', 'gardens', 'gdns',
+    'lane', 'ln', 'way', 'mews', 'path', 'close', 'heights', 'height',
+    'hill', 'view', 'walk', 'line', 'grove', 'grv', 'garden', 'crest',
+    'crct',
+})
 _ST_CLAIR_AVE_RE = re.compile(r'\bst clair ave ([ew])\b')
 _ST_CLAIR_SHORT_RE = re.compile(r'\bst clair ([ew])\b(?! ave\b)')
 
@@ -90,11 +112,39 @@ def _normalize_with_spelled_directions(street_name: str) -> str:
     )
 
 
+_CARDINAL_TAILS = frozenset({'w', 'e', 'n', 's', 'west', 'east', 'north', 'south'})
+
+
+def _looks_like_street_tail(text: str) -> bool:
+    """True when the text ends in a recognizable street-type token."""
+    words = re.sub(r'\s+', ' ', text.strip().lower()).split()
+    if not words:
+        return False
+    if words[-1] in _STREET_TYPE_TOKENS:
+        return True
+    # 'Queen Street West' / 'Bloor Street East' style trailing cardinals.
+    return len(words) >= 2 and words[-1] in _CARDINAL_TAILS and words[-2] in _STREET_TYPE_TOKENS
+
+
+_DESCRIPTIVE_TAIL_RE = re.compile(
+    r'^(?:north|south|east|west|northern|southern|eastern|western|'
+    r'north/south|east/west)\b.*\bleg\s+of\b',
+    re.I,
+)
+
+
 def strip_lookup_prefixes(street_name: str) -> str:
     """Remove bylaw phrasing that is not part of the TCL street token."""
     text = str(street_name).strip()
     text = _FROM_PREFIX_RE.sub('', text)
     text = _CURB_LINE_PREFIX_RE.sub('', text)
+    text = _BRANCH_SIDE_LEG_PREFIX_RE.sub('', text)
+    text = _TERMINUS_STREET_PREFIX_RE.sub('', text).strip()
+    m = _LEADING_THE_RE.match(text)
+    if m:
+        rest = m.group(1).strip()
+        if _looks_like_street_tail(rest) and not _DESCRIPTIVE_TAIL_RE.match(rest):
+            text = rest
     return text.strip()
 
 

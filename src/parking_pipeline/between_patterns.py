@@ -65,3 +65,13 @@ DIR = _DIR
 COMPOUND_DIR = _COMPOUND_DIR
 OPT_PAREN_IN_ANCHOR = _OPT_PAREN_IN_ANCHOR
 FURTHER_TAIL = _FURTHER_TAIL
+
+# Terminal street-type token plus optional trailing cardinal, so that
+# 'Queen Street West King Street' splits after 'West', not after 'Street'.
+STREET_HEAD = (
+    r"[A-Za-z'’.-]+(?:\s+[A-Za-z'’.-]+)*?"  # street name words (lazy)
+    r'(?:\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr'
+    r'|crescent|cres|court|ct|place|pl|terrace|terr|trail|trl|circle|crcl'
+    r'|parkway|pkwy|square|sq|gate|gt|lawn|lwn|gardens|gdns|lane|ln|way|grove))'
+    r'(?:\s+(?:north|south|east|west))?'
+)

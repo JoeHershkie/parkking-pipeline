@@ -15,6 +15,7 @@ _SAMPLE_DATA_FILES = (
     'tcl_intersections.geojson',
     'tcl_street_names.csv',
     'street_aliases.csv',
+    'highway_aliases.csv',
     ROAD_EDGES_FILENAME,
 )
 

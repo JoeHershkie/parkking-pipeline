@@ -6,6 +6,7 @@ import re
 
 from .between_patterns import (
     ADJACENT_TO_RE,
+    APPROX,
     COMPASS,
     COMPOUND_DIR,
     DIR,
@@ -137,6 +138,26 @@ def preprocess_between(text: str) -> str:
             out,
             flags=re.IGNORECASE,
         )
+    # "… Street at a point N metres DIR of X" → "… Street and a point N metres DIR of X"
+    # so the offset clause parses instead of leaking into intersection captures.
+    out = re.sub(
+        rf'\bat\s+a\s+point\s+{APPROX}({METRES})\s+metres\s+({COMPOUND_DIR})\s+of\b',
+        r'and a point \1 metres \2 of',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        rf'\bat\s+a\s+point\s+{APPROX}({METRES})\s+metres\s+({COMPOUND_DIR})\s+thereof\b',
+        r'and a point \1 metres \2 thereof',
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        rf'\bat\s+a\s+point\s+{APPROX}({METRES})\s+metres\s+({COMPOUND_DIR})\s*$',
+        r'and a point \1 metres \2',
+        out,
+        flags=re.IGNORECASE,
+    )
     if not SCHEDULE_IN_BETWEEN_RE.search(out) and not ADJACENT_TO_RE.match(out):
         out = re.sub(r'\s+to\s+', ' and ', out, flags=re.IGNORECASE)
     return out.strip()

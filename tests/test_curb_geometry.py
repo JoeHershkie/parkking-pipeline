@@ -280,6 +280,36 @@ def test_wrapping_north_and_east_selects_one_curb():
     assert result.geometry.geom_type == 'LineString' or len(parts) <= 2
 
 
+def test_triple_wrapping_side_unions_per_direction_runs():
+    """'East, north and west' on an L-shaped block: union per-direction curb runs."""
+    line = LineString([P(0, 80), P(0, 0), P(80, 0)])
+    strip = line.buffer(7, cap_style='flat', join_style='round')
+    index = _index([strip])
+    spec = parse_side('East, north and west')
+    assert spec.mode == 'wrapping' and len(spec.directions) == 3
+    result = _resolve(line, 'East, north and west', index)
+    _assert_line(result.geometry)
+    assert result.method == METHOD_ROAD_EDGE
+    assert SIDE_AMBIGUOUS not in result.warnings
+    parts = (
+        list(result.geometry.geoms)
+        if result.geometry.geom_type == 'MultiLineString'
+        else [result.geometry]
+    )
+    assert all(not part.crosses(line) for part in parts)
+
+
+def test_triple_wrapping_opposite_side_also_resolves():
+    """The other side of the L also matches all three directions on its curb."""
+    line = LineString([P(0, 80), P(0, 0), P(80, 0)])
+    strip = line.buffer(7, cap_style='flat', join_style='round')
+    index = _index([strip])
+    result = _resolve(line, 'East, north and west', index)
+    _assert_line(result.geometry)
+    # Total length should be comparable to a full side, not double-counted.
+    assert result.geometry.length <= line.length * 1.6
+
+
 def test_opposing_and_both_select_two_curbs():
     index = _index([_strip_box()])
     line = LineString([P(10, 7), P(130, 7)])

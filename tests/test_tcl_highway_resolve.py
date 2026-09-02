@@ -129,3 +129,23 @@ def test_strip_descriptor_cul_de_sac():
 def test_highway_lookup_ambiguous_multi_base():
     assert thr.highway_lookup_ambiguous('Braeside Avenue') is True
     assert thr.highway_lookup_ambiguous('Spadina Avenue') is False
+
+
+def test_curated_highway_alias_wins():
+    _install_mini_index()
+    thr.build_index(
+        legal_keys=thr._legal_keys | {tcl_highway_key('Queen Street West')},
+        base_to_legals=thr._base_to_legals,
+        highway_aliases={'salvation square': 'queen street west'},
+    )
+    assert thr.resolve_tcl_highway('Salvation Square') == 'queen street west'
+
+
+def test_highway_alias_service_road():
+    _install_mini_index()
+    thr.build_index(
+        legal_keys=thr._legal_keys | {tcl_highway_key('Kingston Road')},
+        base_to_legals=thr._base_to_legals,
+        highway_aliases={'kingston road service road': 'kingston road'},
+    )
+    assert thr.resolve_tcl_highway('Kingston Road Service Road') == 'kingston road'
