@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import numpy as np
+import shapely
 from shapely import STRtree, make_valid
+from shapely.geometry import LineString, MultiLineString
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -45,6 +48,11 @@ class RoadEdgeIndex:
     manifest: Mapping[str, Any]
     _road_tree: STRtree = field(repr=False, compare=False)
     _ix_tree: STRtree = field(repr=False, compare=False)
+    _road_geoms: np.ndarray = field(repr=False, compare=False, default=None)
+    _road_boundaries: np.ndarray = field(repr=False, compare=False, default=None)
+    _road_oids: np.ndarray = field(repr=False, compare=False, default=None)
+    _road_interiors: np.ndarray = field(repr=False, compare=False, default=None)
+    _ix_geoms: np.ndarray = field(repr=False, compare=False, default=None)
 
     def query_road_strips(self, geom: BaseGeometry) -> gpd.GeoDataFrame:
         """Return Road Edge rows whose polygons intersect *geom* (EPSG:32617)."""
@@ -61,6 +69,41 @@ class RoadEdgeIndex:
     def query_intersections_within(self, geom: BaseGeometry, distance: float) -> gpd.GeoDataFrame:
         """Intersection rows within *distance* metres of *geom* (no buffer polygon)."""
         return _rows_within(self.intersections, self._ix_tree, geom, distance)
+
+    def query_road_candidates_within(
+        self, geom: BaseGeometry, distance: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return (oids, geoms, boundaries, interiors) within *distance* metres."""
+        if self._road_geoms is None or len(self._road_geoms) == 0:
+            empty_obj = np.empty(0, dtype=object)
+            return np.empty(0, dtype=int), empty_obj, empty_obj, empty_obj
+        try:
+            idxs = self._road_tree.query(geom, predicate='dwithin', distance=float(distance))
+        except (TypeError, ValueError):
+            idxs = self._road_tree.query(geom.buffer(distance), predicate='intersects')
+        if len(idxs) == 0:
+            empty_obj = np.empty(0, dtype=object)
+            return np.empty(0, dtype=int), empty_obj, empty_obj, empty_obj
+        return (
+            self._road_oids[idxs],
+            self._road_geoms[idxs],
+            self._road_boundaries[idxs],
+            self._road_interiors[idxs],
+        )
+
+    def query_intersection_geoms_within(
+        self, geom: BaseGeometry, distance: float,
+    ) -> np.ndarray:
+        """Return array of intersection polygon geometries within *distance* metres."""
+        if self._ix_geoms is None or len(self._ix_geoms) == 0:
+            return np.empty(0, dtype=object)
+        try:
+            idxs = self._ix_tree.query(geom, predicate='dwithin', distance=float(distance))
+        except (TypeError, ValueError):
+            idxs = self._ix_tree.query(geom.buffer(distance), predicate='intersects')
+        if len(idxs) == 0:
+            return np.empty(0, dtype=object)
+        return self._ix_geoms[idxs]
 
 
 def road_edges_path() -> Path:
@@ -264,20 +307,56 @@ def _any_in_toronto(projected: gpd.GeoDataFrame) -> bool:
     return bool(inside.any())
 
 
+def _extract_interiors(geom: BaseGeometry) -> BaseGeometry | None:
+    polys = geom.geoms if geom.geom_type == 'MultiPolygon' else (geom,)
+    rings: list[LineString] = []
+    for p in polys:
+        if p.geom_type == 'Polygon':
+            for interior in p.interiors:
+                rings.append(LineString(interior.coords))
+    if not rings:
+        return None
+    return MultiLineString(rings) if len(rings) > 1 else rings[0]
+
+
 def _index_from_frames(
     source_path: Path,
     roads: gpd.GeoDataFrame,
     ixs: gpd.GeoDataFrame,
     manifest: Mapping[str, Any],
 ) -> RoadEdgeIndex:
+    road_geoms = roads.geometry.values if not roads.empty else np.empty(0, dtype=object)
+    road_bounds = shapely.boundary(road_geoms) if len(road_geoms) > 0 else np.empty(0, dtype=object)
+
+    if 'OBJECTID' in roads.columns:
+        road_oids = roads['OBJECTID'].to_numpy(dtype=int, na_value=0)
+    else:
+        road_oids = (
+            np.array([int(r.Index if hasattr(r, 'Index') else 0) for r in roads.itertuples()], dtype=int)
+            if not roads.empty
+            else np.empty(0, dtype=int)
+        )
+
+    road_ints = (
+        np.array([_extract_interiors(g) for g in road_geoms], dtype=object)
+        if len(road_geoms) > 0
+        else np.empty(0, dtype=object)
+    )
+    ix_geoms = ixs.geometry.values if not ixs.empty else np.empty(0, dtype=object)
+
     return RoadEdgeIndex(
         source_path=source_path,
         crs=METRE_CRS,
         road_strips=roads,
         intersections=ixs,
         manifest=manifest,
-        _road_tree=STRtree(list(roads.geometry.values)),
-        _ix_tree=STRtree(list(ixs.geometry.values)),
+        _road_tree=STRtree(list(road_geoms)),
+        _ix_tree=STRtree(list(ix_geoms)),
+        _road_geoms=road_geoms,
+        _road_boundaries=road_bounds,
+        _road_oids=road_oids,
+        _road_interiors=road_ints,
+        _ix_geoms=ix_geoms,
     )
 
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 import pyproj
 import shapely
@@ -415,24 +416,17 @@ def _extract_measured_tracks(
     road_index: RoadEdgeIndex,
 ) -> _MeasuredTracks:
     samples = _chainage_samples(line_m)
-    strips = road_index.query_road_strips_within(line_m, RAY_MAX_M)
-    ixs = road_index.query_intersections_within(line_m, RAY_MAX_M)
-    ix_union = union_all(tuple(ixs.geometry.values)) if not ixs.empty else None
+    cand_oids, cand_geoms, cand_bounds, cand_ints = road_index.query_road_candidates_within(line_m, RAY_MAX_M)
+    cand_ixs = road_index.query_intersection_geoms_within(line_m, RAY_MAX_M)
+
+    boundary_union = union_all(cand_bounds) if len(cand_bounds) > 0 else None
+    if boundary_union is not None and boundary_union.is_empty:
+        boundary_union = None
+
+    ix_union = union_all(cand_ixs) if len(cand_ixs) > 0 else None
     if ix_union is not None and ix_union.is_empty:
         ix_union = None
     ix_skip = ix_union.buffer(MIN_HIT_M) if ix_union is not None else None
-
-    road_polys: list[tuple[int, BaseGeometry]] = []
-    boundaries: list[BaseGeometry] = []
-    geoms = strips.geometry.values if not strips.empty else ()
-    for i, geom in enumerate(geoms):
-        if geom is None or geom.is_empty:
-            continue
-        road_polys.append((_frame_object_id(strips, i), geom))
-        boundaries.append(geom.boundary)
-    boundary_union = union_all(tuple(boundaries)) if boundaries else None
-    if boundary_union is not None and boundary_union.is_empty:
-        boundary_union = None
 
     left_hits: list[_Hit | None] = []
     right_hits: list[_Hit | None] = []
@@ -442,10 +436,10 @@ def _extract_measured_tracks(
             right_hits.append(None)
             continue
         left_hits.append(
-            _ray_hit(origin, s, normal, road_polys, boundary_union, ix_union),
+            _ray_hit(origin, s, normal, cand_oids, cand_bounds, cand_ints, boundary_union, ix_union),
         )
         right_hits.append(
-            _ray_hit(origin, s, (-normal[0], -normal[1]), road_polys, boundary_union, ix_union),
+            _ray_hit(origin, s, (-normal[0], -normal[1]), cand_oids, cand_bounds, cand_ints, boundary_union, ix_union),
         )
 
     left_hits = _reject_offset_jumps(_fill_isolated_gaps(left_hits))
@@ -806,28 +800,37 @@ def _ray_hit(
     origin: Point,
     s: float,
     direction: tuple[float, float],
-    road_polys: Sequence[tuple[int, BaseGeometry]],
+    cand_oids: np.ndarray,
+    cand_bounds: np.ndarray,
+    cand_ints: np.ndarray,
     boundary_union: BaseGeometry | None,
     ix_union: BaseGeometry | None,
 ) -> _Hit | None:
     mag = _hypot(direction[0], direction[1])
-    if mag < 1e-12 or boundary_union is None or not road_polys:
+    if mag < 1e-12 or boundary_union is None or len(cand_oids) == 0:
         return None
-    unit = (direction[0] / mag, direction[1] / mag)
-    end = Point(origin.x + unit[0] * RAY_MAX_M, origin.y + unit[1] * RAY_MAX_M)
+    unit_x, unit_y = direction[0] / mag, direction[1] / mag
+    end = Point(origin.x + unit_x * RAY_MAX_M, origin.y + unit_y * RAY_MAX_M)
     ray = LineString([(origin.x, origin.y), (end.x, end.y)])
+    crossed = ray.intersection(boundary_union)
+    if crossed.is_empty:
+        return None
     best: _Hit | None = None
     best_d = RAY_MAX_M
-    for pt in _iter_hit_points(ray.intersection(boundary_union), origin):
-        dist = origin.distance(pt)
+    for pt in _iter_hit_points(crossed, origin):
+        dist = _hypot(pt.x - origin.x, pt.y - origin.y)
         if dist < MIN_HIT_M or dist >= best_d:
             continue
         if _intersection_blocks(origin, pt, ix_union, dist):
             continue
-        owner = _owning_road(pt, road_polys)
-        if owner is None:
+        owner_idx = _owning_road_idx(pt, cand_bounds)
+        if owner_idx is None:
             continue
-        object_id, poly = owner
+        object_id = int(cand_oids[owner_idx])
+        owner_ints = cand_ints[owner_idx]
+        on_interior = False
+        if owner_ints is not None:
+            on_interior = bool(shapely.distance(owner_ints, pt) <= 0.08)
         best_d = dist
         best = _Hit(
             s=s,
@@ -837,9 +840,22 @@ def _ray_hit(
             object_id=object_id,
             dx=pt.x - origin.x,
             dy=pt.y - origin.y,
-            on_interior=_hit_on_interior(pt, poly),
+            on_interior=on_interior,
         )
     return best
+
+
+def _owning_road_idx(
+    pt: Point,
+    cand_bounds: np.ndarray,
+) -> int | None:
+    if len(cand_bounds) == 0:
+        return None
+    dists = shapely.distance(cand_bounds, pt)
+    min_i = int(np.argmin(dists))
+    if dists[min_i] < 0.15:
+        return min_i
+    return None
 
 
 def _intersection_blocks(
@@ -851,23 +867,13 @@ def _intersection_blocks(
     if ix_union is None or ix_union.is_empty:
         return False
     segment = LineString([(origin.x, origin.y), (hit.x, hit.y)])
+    if not ix_union.intersects(segment):
+        return False
     crossed = segment.intersection(ix_union)
     for pt in _iter_hit_points(crossed, origin):
-        dist = origin.distance(pt)
+        dist = _hypot(pt.x - origin.x, pt.y - origin.y)
         if MIN_HIT_M < dist < hit_dist - 0.02:
             return True
-    return False
-
-
-def _hit_on_interior(pt: Point, poly: BaseGeometry) -> bool:
-    polys = poly.geoms if poly.geom_type == 'MultiPolygon' else (poly,)
-    for part in polys:
-        if part.geom_type != 'Polygon':
-            continue
-        for interior in part.interiors:
-            ring = LineString(interior.coords)
-            if ring.distance(pt) <= 0.08:
-                return True
     return False
 
 
@@ -1013,19 +1019,10 @@ def _select_ring(
 ) -> LineString | MultiLineString | None:
     if spec.ring is None:
         return None
-    strips = (
-        road_index.query_road_strips_within(line_m, RAY_MAX_M)
-        if road_index is not None
-        else None
-    )
     has_holes = False
-    if strips is not None:
-        for geom in strips.geometry:
-            polys = geom.geoms if geom.geom_type == 'MultiPolygon' else (geom,)
-            for poly in polys:
-                if poly.geom_type == 'Polygon' and poly.interiors:
-                    has_holes = True
-                    break
+    if road_index is not None:
+        _cand_oids, _cand_geoms, _cand_bounds, cand_ints = road_index.query_road_candidates_within(line_m, RAY_MAX_M)
+        has_holes = any(interiors is not None for interiors in cand_ints)
     if not has_holes:
         return None
     interior_hits = sorted(
@@ -1271,42 +1268,6 @@ def _row_object_id(row: Any) -> int:
         return int(name)
     except (TypeError, ValueError):
         return 0
-
-
-def _frame_object_id(frame: pd.DataFrame, loc: int) -> int:
-    for key in ('OBJECTID', 'objectid', 'OBJECT_ID'):
-        if key not in frame.columns:
-            continue
-        val = frame.iloc[loc][key]
-        try:
-            if val is None or pd.isna(val):
-                continue
-        except (TypeError, ValueError):
-            pass
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            continue
-    try:
-        return int(frame.index[loc])
-    except (TypeError, ValueError, IndexError):
-        return 0
-
-
-def _owning_road(
-    pt: Point,
-    road_polys: Sequence[tuple[int, BaseGeometry]],
-) -> tuple[int, BaseGeometry] | None:
-    best: tuple[int, BaseGeometry] | None = None
-    best_d = 0.15
-    for object_id, poly in road_polys:
-        d = poly.boundary.distance(pt)
-        if d <= 1e-7:
-            return object_id, poly
-        if d < best_d:
-            best_d = d
-            best = (object_id, poly)
-    return best
 
 
 def _is_closed(line_m: LineString) -> bool:
